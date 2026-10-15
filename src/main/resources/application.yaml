@@ -1,13 +1,13 @@
 spring:
   application:
-    name: ms-stock
+    name: ms-ofisy-stock
   flyway:
     enabled: true
     locations: classpath:db/migration
   profiles:
     active: dev
   datasource:
-    url: jdbc:postgresql://localhost:5434/ms_stock_db
+    url: jdbc:postgresql://localhost:5434/ms_ofisy_stock_db
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
     driver-class-name: org.postgresql.Driver
