@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16
-    container_name: ms-stock-db
+    container_name: ms-ofisy-stock-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -18,7 +18,7 @@ services:
 
   app:
     build: .
-    container_name: ms-stock-app
+    container_name: ms-ofisy-stock-app
     depends_on:
       postgres:
         condition: service_healthy
