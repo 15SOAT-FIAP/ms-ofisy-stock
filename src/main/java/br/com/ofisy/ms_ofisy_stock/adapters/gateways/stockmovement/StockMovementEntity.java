@@ -48,6 +48,6 @@ public class StockMovementEntity {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    @Column
+    @Column(nullable = false)
     private LocalDateTime updatedAt;
 }

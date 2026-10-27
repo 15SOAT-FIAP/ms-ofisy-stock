@@ -27,10 +27,10 @@ public class StockEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String productName;
 
-    @Column
+    @Column(nullable = false)
     private String description;
 
     @Column(nullable = false)
@@ -40,7 +40,7 @@ public class StockEntity {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal unitPrice;
 
-    @Column
+    @Column(nullable = false)
     private String category;
 
     @Column(nullable = false)

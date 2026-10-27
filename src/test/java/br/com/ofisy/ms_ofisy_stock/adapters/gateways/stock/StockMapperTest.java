@@ -63,13 +63,12 @@ class StockMapperTest {
     @Test
     void shouldKeepIdWhenConvertingPersistedDomainToEntity() {
         var id = UUID.randomUUID();
-        var stock = Stock.reconstruct(id, "Radiador", null, 10, new BigDecimal("350.00"), null, 2,
+        var stock = Stock.reconstruct(id, "Radiador", "Radiador de água com reservatório", 10,
+                new BigDecimal("350.00"), "Arrefecimento", 2,
                 LocalDateTime.of(2026, 1, 10, 8, 0), LocalDateTime.of(2026, 1, 10, 8, 0));
 
         var result = StockMapper.toEntity(stock);
 
         assertThat(result.getId()).isEqualTo(id);
-        assertThat(result.getDescription()).isNull();
-        assertThat(result.getCategory()).isNull();
     }
 }
