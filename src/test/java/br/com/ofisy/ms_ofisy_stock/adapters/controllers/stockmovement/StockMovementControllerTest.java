@@ -4,12 +4,15 @@ import br.com.ofisy.ms_ofisy_stock.application.stockmovement.list.ListStockMovem
 import br.com.ofisy.ms_ofisy_stock.application.stockmovement.listbystock.ListByStockStockMovementUseCase;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.MovementType;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.StockMovement;
+import br.com.ofisy.ms_ofisy_stock.shared.jwt.JwtService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -24,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(StockMovementController.class)
+@AutoConfigureMockMvc(addFilters = false)
+@WithMockUser(roles = "STOCKMAN")
 class StockMovementControllerTest {
 
     private static final String BASE_URL = "/api/v1/stock-movements";
@@ -32,6 +37,9 @@ class StockMovementControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private JwtService jwtService;
 
     @MockitoBean
     private ListStockMovementUseCase listStockMovementUseCase;

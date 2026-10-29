@@ -6,10 +6,15 @@ import br.com.ofisy.ms_ofisy_stock.domain.stock.StockRepository;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.MovementType;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.StockMovement;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.StockMovementRepository;
+import br.com.ofisy.ms_ofisy_stock.shared.jwt.JwtTestTokens;
 import io.restassured.RestAssured;
+import io.restassured.response.ValidatableResponse;
+import io.restassured.specification.RequestSpecification;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -24,7 +29,10 @@ import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "jwt.secret=" + JwtTestTokens.SECRET
+)
 class StockMovementControllerIT {
 
     private static final String BASE_URL = "/api/v1/stock-movements";
@@ -58,7 +66,7 @@ class StockMovementControllerIT {
 
         @Test
         void shouldReturnPageOfMovements() {
-            RestAssured.given()
+            authorized()
                     .when()
                     .get(BASE_URL)
                     .then()
@@ -72,7 +80,7 @@ class StockMovementControllerIT {
 
         @Test
         void shouldReturnOnlyMovementsOfTheStock() {
-            RestAssured.given()
+            authorized()
                     .queryParam("stockId", stockId)
                     .when()
                     .get(BASE_URL)
@@ -85,7 +93,7 @@ class StockMovementControllerIT {
 
         @Test
         void shouldReturnEmptyPageWhenStockHasNoMovements() {
-            RestAssured.given()
+            authorized()
                     .queryParam("stockId", UUID.randomUUID())
                     .when()
                     .get(BASE_URL)
@@ -93,5 +101,44 @@ class StockMovementControllerIT {
                     .statusCode(200)
                     .body("content.size()", equalTo(0));
         }
+    }
+
+    @Nested
+    class Authorization {
+
+        @Test
+        void shouldReturn401WhenTokenIsMissing() {
+            RestAssured.given()
+                    .when()
+                    .get(BASE_URL)
+                    .then()
+                    .statusCode(401);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"MECHANIC", "ATTENDANT"})
+        void shouldReturn403WhenRoleIsNotAllowed(String role) {
+            getWithToken(JwtTestTokens.withRole(JwtTestTokens.SECRET, role)).statusCode(403);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"ADMIN", "STOCKMAN"})
+        void shouldReturn200ForAllowedRoles(String role) {
+            getWithToken(JwtTestTokens.withRole(JwtTestTokens.SECRET, role)).statusCode(200);
+        }
+
+        private ValidatableResponse getWithToken(String token) {
+            return RestAssured.given()
+                    .header("Authorization", "Bearer " + token)
+                    .queryParam("stockId", stockId)
+                    .when()
+                    .get(BASE_URL)
+                    .then();
+        }
+    }
+
+    private RequestSpecification authorized() {
+        return RestAssured.given()
+                .header("Authorization", "Bearer " + JwtTestTokens.withRole(JwtTestTokens.SECRET, "STOCKMAN"));
     }
 }
