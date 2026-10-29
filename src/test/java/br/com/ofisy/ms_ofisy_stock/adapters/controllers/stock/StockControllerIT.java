@@ -6,11 +6,16 @@ import br.com.ofisy.ms_ofisy_stock.domain.stock.StockRepository;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.MovementType;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.StockMovement;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.StockMovementRepository;
+import br.com.ofisy.ms_ofisy_stock.shared.jwt.JwtTestTokens;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
+import io.restassured.response.ValidatableResponse;
+import io.restassured.specification.RequestSpecification;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -25,7 +30,10 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "jwt.secret=" + JwtTestTokens.SECRET
+)
 class StockControllerIT {
 
     private static final String BASE_URL = "/api/v1/stocks";
@@ -71,7 +79,7 @@ class StockControllerIT {
 
         @Test
         void shouldReturnFirstPageWithDefaultSizeOf10() {
-            RestAssured.given()
+            authorized()
                     .when()
                     .get(BASE_URL)
                     .then()
@@ -81,7 +89,7 @@ class StockControllerIT {
 
         @Test
         void shouldRespectRequestedPageSize() {
-            RestAssured.given()
+            authorized()
                     .queryParam("size", 3)
                     .when()
                     .get(BASE_URL)
@@ -96,7 +104,7 @@ class StockControllerIT {
 
         @Test
         void shouldReturnSeededStock() {
-            RestAssured.given()
+            authorized()
                     .when()
                     .get(BASE_URL + "/{id}", SEEDED_STOCK_ID)
                     .then()
@@ -108,7 +116,7 @@ class StockControllerIT {
 
         @Test
         void shouldReturn404WhenStockDoesNotExist() {
-            RestAssured.given()
+            authorized()
                     .when()
                     .get(BASE_URL + "/{id}", UUID.randomUUID())
                     .then()
@@ -122,7 +130,7 @@ class StockControllerIT {
 
         @Test
         void shouldReturnStockByProductName() {
-            RestAssured.given()
+            authorized()
                     .when()
                     .get(BASE_URL + "/productName/{productName}", productName)
                     .then()
@@ -138,7 +146,7 @@ class StockControllerIT {
         void shouldCreateStockAndPersistIt() {
             String name = "Filtro de ar " + UUID.randomUUID();
 
-            String id = RestAssured.given()
+            String id = authorized()
                     .contentType(ContentType.JSON)
                     .body(createBody(name))
                     .when()
@@ -156,7 +164,7 @@ class StockControllerIT {
 
         @Test
         void shouldReturn409WhenProductNameAlreadyExists() {
-            RestAssured.given()
+            authorized()
                     .contentType(ContentType.JSON)
                     .body(createBody(productName))
                     .when()
@@ -168,7 +176,7 @@ class StockControllerIT {
 
         @Test
         void shouldReturn400WhenRequiredFieldsAreMissing() {
-            RestAssured.given()
+            authorized()
                     .contentType(ContentType.JSON)
                     .body("{\"productName\": \"Sem descrição\"}")
                     .when()
@@ -186,7 +194,7 @@ class StockControllerIT {
 
         @Test
         void shouldAddQuantityAndRegisterInMovement() {
-            RestAssured.given()
+            authorized()
                     .queryParam("quantity", 5)
                     .when()
                     .post(BASE_URL + "/{id}/add", stockId)
@@ -205,7 +213,7 @@ class StockControllerIT {
 
         @Test
         void shouldReturn400WhenQuantityIsNotPositive() {
-            RestAssured.given()
+            authorized()
                     .queryParam("quantity", 0)
                     .when()
                     .post(BASE_URL + "/{id}/add", stockId)
@@ -222,7 +230,7 @@ class StockControllerIT {
 
         @Test
         void shouldConsumeQuantityAndRegisterOutMovement() {
-            RestAssured.given()
+            authorized()
                     .queryParam("quantity", 8)
                     .when()
                     .post(BASE_URL + "/{id}/consume", stockId)
@@ -237,7 +245,7 @@ class StockControllerIT {
 
         @Test
         void shouldReturn409AndKeepQuantityWhenStockIsInsufficient() {
-            RestAssured.given()
+            authorized()
                     .queryParam("quantity", 11)
                     .when()
                     .post(BASE_URL + "/{id}/consume", stockId)
@@ -255,7 +263,7 @@ class StockControllerIT {
 
         @Test
         void shouldUpdateOnlyInformedFields() {
-            RestAssured.given()
+            authorized()
                     .contentType(ContentType.JSON)
                     .body("{\"unitPrice\": 65.00, \"category\": \"Filtros\"}")
                     .when()
@@ -269,7 +277,7 @@ class StockControllerIT {
 
         @Test
         void shouldReturn409WhenNewProductNameBelongsToAnotherStock() {
-            RestAssured.given()
+            authorized()
                     .contentType(ContentType.JSON)
                     .body("{\"productName\": \"Radiador\"}")
                     .when()
@@ -278,5 +286,104 @@ class StockControllerIT {
                     .statusCode(409)
                     .body("title", equalTo("Estoque já existe"));
         }
+    }
+
+    @Nested
+    class Authorization {
+
+        @Test
+        void shouldReturn401WhenTokenIsMissing() {
+            RestAssured.given()
+                    .when()
+                    .get(BASE_URL)
+                    .then()
+                    .statusCode(401)
+                    .body("status", equalTo(401))
+                    .body("title", equalTo("Usuário não autorizado"));
+        }
+
+        @Test
+        void shouldReturn401WhenTokenIsSignedWithAnotherSecret() {
+            getWithToken(JwtTestTokens.withRole(JwtTestTokens.OTHER_SECRET, "STOCKMAN")).statusCode(401);
+        }
+
+        @Test
+        void shouldReturn401WhenTokenIsExpired() {
+            getWithToken(JwtTestTokens.expired(JwtTestTokens.SECRET, "STOCKMAN")).statusCode(401);
+        }
+
+        @Test
+        void shouldReturn401WhenTokenWasIssuedForACustomer() {
+            getWithToken(JwtTestTokens.withIssuer(JwtTestTokens.SECRET, JwtTestTokens.CUSTOMER_ISSUER, "STOCKMAN"))
+                    .statusCode(401);
+        }
+
+        @Test
+        void shouldReturn403WhenRoleIsNotAllowed() {
+            getWithToken(JwtTestTokens.withRole(JwtTestTokens.SECRET, "ATTENDANT"))
+                    .statusCode(403)
+                    .body("status", equalTo(403))
+                    .body("title", equalTo("Usuário sem permissão"));
+        }
+
+        @Test
+        void shouldReturn403WhenTokenHasNoRole() {
+            getWithToken(JwtTestTokens.withoutRole(JwtTestTokens.SECRET)).statusCode(403);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"ADMIN", "STOCKMAN", "MECHANIC"})
+        void shouldReturn200OnQueriesForAllowedRoles(String role) {
+            getWithToken(JwtTestTokens.withRole(JwtTestTokens.SECRET, role)).statusCode(200);
+        }
+
+        @Test
+        void shouldReturn403AndKeepQuantityWhenMechanicTriesToConsume() {
+            RestAssured.given()
+                    .header("Authorization", "Bearer " + JwtTestTokens.withRole(JwtTestTokens.SECRET, "MECHANIC"))
+                    .queryParam("quantity", 5)
+                    .when()
+                    .post(BASE_URL + "/{id}/consume", stockId)
+                    .then()
+                    .statusCode(403);
+
+            assertThat(stockRepository.findById(stockId).orElseThrow().getQuantity()).isEqualTo(10);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"ADMIN", "STOCKMAN"})
+        void shouldAllowChangesForAllowedRoles(String role) {
+            RestAssured.given()
+                    .header("Authorization", "Bearer " + JwtTestTokens.withRole(JwtTestTokens.SECRET, role))
+                    .queryParam("quantity", 1)
+                    .when()
+                    .post(BASE_URL + "/{id}/add", stockId)
+                    .then()
+                    .statusCode(200)
+                    .body("quantity", equalTo(11));
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"/actuator/health", "/v3/api-docs"})
+        void shouldAllowPublicPathsWithoutToken(String path) {
+            RestAssured.given()
+                    .when()
+                    .get(path)
+                    .then()
+                    .statusCode(200);
+        }
+
+        private ValidatableResponse getWithToken(String token) {
+            return RestAssured.given()
+                    .header("Authorization", "Bearer " + token)
+                    .when()
+                    .get(BASE_URL + "/{id}", stockId)
+                    .then();
+        }
+    }
+
+    private RequestSpecification authorized() {
+        return RestAssured.given()
+                .header("Authorization", "Bearer " + JwtTestTokens.withRole(JwtTestTokens.SECRET, "STOCKMAN"));
     }
 }
