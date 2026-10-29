@@ -1,0 +1,42 @@
+package br.com.ofisy.ms_ofisy_stock.adapters.controllers.stockmovement;
+
+import br.com.ofisy.ms_ofisy_stock.adapters.controllers.stockmovement.dto.StockMovementResponseDTO;
+import br.com.ofisy.ms_ofisy_stock.adapters.presenters.stockmovement.StockMovementPresenter;
+import br.com.ofisy.ms_ofisy_stock.application.stockmovement.list.ListStockMovementUseCase;
+import br.com.ofisy.ms_ofisy_stock.application.stockmovement.listbystock.ListByStockStockMovementUseCase;
+import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/stock-movements")
+@RequiredArgsConstructor
+public class StockMovementController implements StockMovementApi {
+
+    private final ListStockMovementUseCase listStockMovementUseCase;
+    private final ListByStockStockMovementUseCase listByStockStockMovementUseCase;
+
+    @GetMapping
+    public ResponseEntity<Page<StockMovementResponseDTO>> getAllStockMovements(
+            @ParameterObject @PageableDefault(size = 10) Pageable pageable) {
+
+        return ResponseEntity.ok(listStockMovementUseCase.execute(pageable).map(StockMovementPresenter::present));
+    }
+
+    @GetMapping(params = "stockId")
+    public ResponseEntity<Page<StockMovementResponseDTO>> getByStockId(
+            @RequestParam UUID stockId,
+            @ParameterObject @PageableDefault(size = 10) Pageable pageable) {
+
+        return ResponseEntity.ok(listByStockStockMovementUseCase.execute(stockId, pageable).map(StockMovementPresenter::present));
+    }
+}
