@@ -15,4 +15,6 @@ public interface StockRepository {
     Optional<Stock> findById(UUID id);
 
     Optional<Stock> findByProductName(String productName);
+
+    Optional<Stock> lockById(UUID id);
 }

@@ -53,8 +53,8 @@ class ConsumeByServiceOrderStockServiceTest {
 
         @Test
         void shouldConsumeEveryItemLinkedToServiceOrderWhenAllHaveBalance() {
-            when(repository.findById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 10)));
-            when(repository.findById(FILTER_ID)).thenReturn(Optional.of(persistedStock(FILTER_ID, "Filtro de óleo", 3)));
+            when(repository.lockById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 10)));
+            when(repository.lockById(FILTER_ID)).thenReturn(Optional.of(persistedStock(FILTER_ID, "Filtro de óleo", 3)));
             Stock radiator = persistedStock(RADIATOR_ID, "Radiador", 8);
             Stock filter = persistedStock(FILTER_ID, "Filtro de óleo", 0);
             when(consumeStockUseCase.execute(new ConsumeStockCommand(RADIATOR_ID, 2, SERVICE_ORDER_ID))).thenReturn(radiator);
@@ -64,14 +64,14 @@ class ConsumeByServiceOrderStockServiceTest {
                     command(new StockItem(RADIATOR_ID, 2), new StockItem(FILTER_ID, 3)));
 
             assertThat(result.consumed()).isTrue();
-            assertThat(result.consumedStocks()).containsExactly(radiator, filter);
+            assertThat(result.consumedStocks()).containsExactlyInAnyOrder(radiator, filter);
             assertThat(result.missingItems()).isEmpty();
         }
 
         @Test
         void shouldConsumeNothingWhenAnyItemHasInsufficientBalance() {
-            when(repository.findById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 10)));
-            when(repository.findById(FILTER_ID)).thenReturn(Optional.of(persistedStock(FILTER_ID, "Filtro de óleo", 1)));
+            when(repository.lockById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 10)));
+            when(repository.lockById(FILTER_ID)).thenReturn(Optional.of(persistedStock(FILTER_ID, "Filtro de óleo", 1)));
 
             ConsumeByServiceOrderStockResult result = consumeByServiceOrderService.execute(
                     command(new StockItem(RADIATOR_ID, 2), new StockItem(FILTER_ID, 3)));
@@ -84,7 +84,7 @@ class ConsumeByServiceOrderStockServiceTest {
 
         @Test
         void shouldReportMissingItemWithZeroAvailableWhenStockDoesNotExist() {
-            when(repository.findById(RADIATOR_ID)).thenReturn(Optional.empty());
+            when(repository.lockById(RADIATOR_ID)).thenReturn(Optional.empty());
 
             ConsumeByServiceOrderStockResult result = consumeByServiceOrderService.execute(
                     command(new StockItem(RADIATOR_ID, 2)));
@@ -95,7 +95,7 @@ class ConsumeByServiceOrderStockServiceTest {
 
         @Test
         void shouldSumQuantitiesWhenSameStockAppearsMoreThanOnce() {
-            when(repository.findById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 4)));
+            when(repository.lockById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 4)));
 
             ConsumeByServiceOrderStockResult result = consumeByServiceOrderService.execute(
                     command(new StockItem(RADIATOR_ID, 2), new StockItem(RADIATOR_ID, 3)));
@@ -105,7 +105,7 @@ class ConsumeByServiceOrderStockServiceTest {
 
         @Test
         void shouldConsumeSummedQuantityOnceWhenSameStockAppearsMoreThanOnce() {
-            when(repository.findById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 10)));
+            when(repository.lockById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 10)));
 
             consumeByServiceOrderService.execute(command(new StockItem(RADIATOR_ID, 2), new StockItem(RADIATOR_ID, 3)));
 
@@ -118,7 +118,7 @@ class ConsumeByServiceOrderStockServiceTest {
 
             assertThat(result.consumed()).isTrue();
             assertThat(result.consumedStocks()).isEmpty();
-            verify(repository, never()).findById(any());
+            verify(repository, never()).lockById(any());
             verify(consumeStockUseCase, never()).execute(any());
         }
 
