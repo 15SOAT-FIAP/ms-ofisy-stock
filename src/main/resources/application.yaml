@@ -19,6 +19,21 @@ spring:
       file: compose.db.yaml
   config:
     import: optional:file:.env[.properties]
+  cloud:
+    aws:
+      region:
+        static: us-east-1
+      sqs:
+        queue-not-found-strategy: fail
+ofisy:
+  messaging:
+    queues:
+      stock: ofisy-stock.fifo
+    topics:
+      stock: ofisy-stock-events.fifo
+    outbox:
+      publish-interval: 1s
+      batch-size: 100
 jwt:
   secret: ${JWT_SECRET}
 security:
