@@ -31,7 +31,8 @@ public class ReleaseStockService implements ReleaseStockUseCase {
                 MovementType.IN,
                 cmd.quantity(),
                 previousQuantity,
-                stock.getQuantity()
+                stock.getQuantity(),
+                cmd.serviceOrderId()
         ));
         return repository.save(stock);
     }

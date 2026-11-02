@@ -12,6 +12,7 @@ public record StockMovementResponseDTO(
         Integer quantity,
         Integer previousQuantity,
         Integer newQuantity,
+        UUID serviceOrderId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

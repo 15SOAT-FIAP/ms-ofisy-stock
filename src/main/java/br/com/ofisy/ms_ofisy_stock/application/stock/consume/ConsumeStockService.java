@@ -36,7 +36,8 @@ public class ConsumeStockService implements ConsumeStockUseCase {
                 MovementType.OUT,
                 cmd.quantity(),
                 previousQuantity,
-                stock.getQuantity()
+                stock.getQuantity(),
+                cmd.serviceOrderId()
         ));
         return repository.save(stock);
     }

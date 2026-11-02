@@ -34,6 +34,7 @@ class StockMovementControllerTest {
     private static final String BASE_URL = "/api/v1/stock-movements";
     private static final UUID ID = UUID.randomUUID();
     private static final UUID STOCK_ID = UUID.randomUUID();
+    private static final UUID SERVICE_ORDER_ID = UUID.randomUUID();
 
     @Autowired
     private MockMvc mockMvc;
@@ -48,7 +49,7 @@ class StockMovementControllerTest {
     private ListByStockStockMovementUseCase listByStockStockMovementUseCase;
 
     private StockMovement movement() {
-        return StockMovement.reconstruct(ID, STOCK_ID, MovementType.OUT, 4, 10, 6,
+        return StockMovement.reconstruct(ID, STOCK_ID, MovementType.OUT, 4, 10, 6, SERVICE_ORDER_ID,
                 LocalDateTime.of(2026, 10, 17, 10, 0), LocalDateTime.of(2026, 10, 17, 10, 0));
     }
 
@@ -68,6 +69,7 @@ class StockMovementControllerTest {
                     .andExpect(jsonPath("$.content[0].quantity").value(4))
                     .andExpect(jsonPath("$.content[0].previousQuantity").value(10))
                     .andExpect(jsonPath("$.content[0].newQuantity").value(6))
+                    .andExpect(jsonPath("$.content[0].serviceOrderId").value(SERVICE_ORDER_ID.toString()))
                     .andExpect(jsonPath("$.content[0].createdAt").value("2026-10-17T10:00:00"));
 
             verifyNoInteractions(listByStockStockMovementUseCase);

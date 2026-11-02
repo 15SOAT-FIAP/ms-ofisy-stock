@@ -9,7 +9,11 @@ public interface ReleaseStockUseCase {
 
     record ReleaseStockCommand(
             UUID stockId,
-            Integer quantity
+            Integer quantity,
+            UUID serviceOrderId
     ) {
+        public ReleaseStockCommand(UUID stockId, Integer quantity) {
+            this(stockId, quantity, null);
+        }
     }
 }

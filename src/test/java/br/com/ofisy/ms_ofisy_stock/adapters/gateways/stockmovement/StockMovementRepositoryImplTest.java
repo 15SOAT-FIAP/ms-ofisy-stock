@@ -89,6 +89,17 @@ class StockMovementRepositoryImplTest {
     }
 
     @Test
+    void shouldFindStockMovementsByServiceOrderId() {
+        var serviceOrderId = UUID.randomUUID();
+        var id = UUID.randomUUID();
+        when(jpa.findByServiceOrderId(serviceOrderId)).thenReturn(List.of(persistedEntity(id, UUID.randomUUID())));
+
+        var result = repository.findByServiceOrderId(serviceOrderId);
+
+        assertThat(result).extracting(StockMovement::getId).containsExactly(id);
+    }
+
+    @Test
     void shouldReturnEmptyPageWhenStockHasNoMovements() {
         var pageable = PageRequest.of(0, 5);
         var stockId = UUID.randomUUID();
