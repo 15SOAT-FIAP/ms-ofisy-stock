@@ -176,4 +176,4 @@ Com `make dev-up` e `make run`:
 | `make db-outbox`           | Lista os últimos eventos do outbox e se já foram publicados       |
 | `make db-processed-events` | Lista os últimos eventos processados                              |
 
-> O LocalStack do estoque usa a porta `4566`, a mesma do core e do `ms-ofisy-execution`, então só um deles pode ficar no ar por vez. Para exercitar a comunicação entre os serviços, todos precisam apontar para o mesmo LocalStack, com os tópicos e as assinaturas de cada um.
+> O LocalStack do estoque usa a porta `4566`, a mesma do core, então só um dos dois pode ficar no ar por vez. Para exercitar a comunicação entre os serviços, todos precisam apontar para o mesmo LocalStack, com os tópicos e as assinaturas de cada um.
