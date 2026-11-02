@@ -3,7 +3,7 @@ package br.com.ofisy.ms_ofisy_stock.application.stock.releasebyserviceorder;
 import br.com.ofisy.ms_ofisy_stock.application.stock.release.ReleaseStockUseCase;
 import br.com.ofisy.ms_ofisy_stock.application.stock.release.ReleaseStockUseCase.ReleaseStockCommand;
 import br.com.ofisy.ms_ofisy_stock.application.stock.releasebyserviceorder.ReleaseByServiceOrderStockUseCase.ReleaseByServiceOrderStockCommand;
-import br.com.ofisy.ms_ofisy_stock.domain.stock.Stock;
+import br.com.ofisy.ms_ofisy_stock.application.stock.releasebyserviceorder.ReleaseByServiceOrderStockUseCase.ReleasedStockItem;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.MovementType;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.StockMovement;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.StockMovementRepository;
@@ -17,7 +17,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.UUID;
 
-import static br.com.ofisy.ms_ofisy_stock.application.stock.StockFixture.persistedStock;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -53,14 +52,27 @@ class ReleaseByServiceOrderStockServiceTest {
             when(stockMovementRepository.findByServiceOrderId(SERVICE_ORDER_ID)).thenReturn(List.of(
                     movement(RADIATOR_ID, MovementType.OUT, 2),
                     movement(FILTER_ID, MovementType.OUT, 3)));
-            Stock radiator = persistedStock(RADIATOR_ID, "Radiador", 10);
-            Stock filter = persistedStock(FILTER_ID, "Filtro de óleo", 30);
-            when(releaseStockUseCase.execute(new ReleaseStockCommand(RADIATOR_ID, 2, SERVICE_ORDER_ID))).thenReturn(radiator);
-            when(releaseStockUseCase.execute(new ReleaseStockCommand(FILTER_ID, 3, SERVICE_ORDER_ID))).thenReturn(filter);
 
-            List<Stock> result = releaseByServiceOrderService.execute(new ReleaseByServiceOrderStockCommand(SERVICE_ORDER_ID));
+            List<ReleasedStockItem> result = releaseByServiceOrderService.execute(new ReleaseByServiceOrderStockCommand(SERVICE_ORDER_ID));
 
-            assertThat(result).containsExactly(radiator, filter);
+            assertThat(result).containsExactlyInAnyOrder(
+                    new ReleasedStockItem(RADIATOR_ID, 2),
+                    new ReleasedStockItem(FILTER_ID, 3));
+            verify(releaseStockUseCase).execute(new ReleaseStockCommand(RADIATOR_ID, 2, SERVICE_ORDER_ID));
+            verify(releaseStockUseCase).execute(new ReleaseStockCommand(FILTER_ID, 3, SERVICE_ORDER_ID));
+        }
+
+        @Test
+        void shouldReleaseItemsInStockIdOrder() {
+            UUID lowerId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            UUID higherId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+            when(stockMovementRepository.findByServiceOrderId(SERVICE_ORDER_ID)).thenReturn(List.of(
+                    movement(higherId, MovementType.OUT, 1),
+                    movement(lowerId, MovementType.OUT, 1)));
+
+            List<ReleasedStockItem> result = releaseByServiceOrderService.execute(new ReleaseByServiceOrderStockCommand(SERVICE_ORDER_ID));
+
+            assertThat(result).extracting(ReleasedStockItem::stockId).containsExactly(lowerId, higherId);
         }
 
         @Test
@@ -82,7 +94,7 @@ class ReleaseByServiceOrderStockServiceTest {
                     movement(RADIATOR_ID, MovementType.OUT, 2),
                     movement(RADIATOR_ID, MovementType.IN, 2)));
 
-            List<Stock> result = releaseByServiceOrderService.execute(new ReleaseByServiceOrderStockCommand(SERVICE_ORDER_ID));
+            List<ReleasedStockItem> result = releaseByServiceOrderService.execute(new ReleaseByServiceOrderStockCommand(SERVICE_ORDER_ID));
 
             assertThat(result).isEmpty();
             verify(releaseStockUseCase, never()).execute(any());
@@ -92,7 +104,7 @@ class ReleaseByServiceOrderStockServiceTest {
         void shouldDoNothingWhenServiceOrderHasNoMovements() {
             when(stockMovementRepository.findByServiceOrderId(SERVICE_ORDER_ID)).thenReturn(List.of());
 
-            List<Stock> result = releaseByServiceOrderService.execute(new ReleaseByServiceOrderStockCommand(SERVICE_ORDER_ID));
+            List<ReleasedStockItem> result = releaseByServiceOrderService.execute(new ReleaseByServiceOrderStockCommand(SERVICE_ORDER_ID));
 
             assertThat(result).isEmpty();
             verify(releaseStockUseCase, never()).execute(any());
