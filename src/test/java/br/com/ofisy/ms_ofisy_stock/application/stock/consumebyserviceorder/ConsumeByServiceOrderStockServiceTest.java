@@ -9,6 +9,9 @@ import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.Consu
 import br.com.ofisy.ms_ofisy_stock.domain.exception.InvalidStockQuantityException;
 import br.com.ofisy.ms_ofisy_stock.domain.stock.Stock;
 import br.com.ofisy.ms_ofisy_stock.domain.stock.StockRepository;
+import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.MovementType;
+import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.StockMovement;
+import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.StockMovementRepository;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +42,9 @@ class ConsumeByServiceOrderStockServiceTest {
     private StockRepository repository;
 
     @Mock
+    private StockMovementRepository stockMovementRepository;
+
+    @Mock
     private ConsumeStockUseCase consumeStockUseCase;
 
     @InjectMocks
@@ -46,6 +52,65 @@ class ConsumeByServiceOrderStockServiceTest {
 
     private ConsumeByServiceOrderStockCommand command(StockItem... items) {
         return new ConsumeByServiceOrderStockCommand(SERVICE_ORDER_ID, List.of(items));
+    }
+
+    private StockMovement movement(UUID stockId, MovementType type, int quantity) {
+        return StockMovement.create(stockId, type, quantity, 10, 10, SERVICE_ORDER_ID);
+    }
+
+    @Nested
+    class Idempotency {
+
+        @Test
+        void shouldNotConsumeAgainWhenServiceOrderAlreadyConsumedEveryItem() {
+            when(stockMovementRepository.findByServiceOrderId(SERVICE_ORDER_ID))
+                    .thenReturn(List.of(movement(RADIATOR_ID, MovementType.OUT, 2)));
+
+            ConsumeByServiceOrderStockResult result = consumeByServiceOrderService.execute(
+                    command(new StockItem(RADIATOR_ID, 2)));
+
+            assertThat(result.consumed()).isTrue();
+            assertThat(result.consumedStocks()).isEmpty();
+            verify(repository, never()).lockById(any());
+            verify(consumeStockUseCase, never()).execute(any());
+        }
+
+        @Test
+        void shouldConsumeOnlyWhatHasNotLeftForServiceOrderYet() {
+            when(stockMovementRepository.findByServiceOrderId(SERVICE_ORDER_ID))
+                    .thenReturn(List.of(movement(RADIATOR_ID, MovementType.OUT, 2)));
+            when(repository.lockById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 10)));
+
+            consumeByServiceOrderService.execute(command(new StockItem(RADIATOR_ID, 5)));
+
+            verify(consumeStockUseCase).execute(new ConsumeStockCommand(RADIATOR_ID, 3, SERVICE_ORDER_ID));
+        }
+
+        @Test
+        void shouldNotConsumeAgainAfterServiceOrderStockWasReleased() {
+            when(stockMovementRepository.findByServiceOrderId(SERVICE_ORDER_ID)).thenReturn(List.of(
+                    movement(RADIATOR_ID, MovementType.OUT, 2),
+                    movement(RADIATOR_ID, MovementType.IN, 2)));
+
+            ConsumeByServiceOrderStockResult result = consumeByServiceOrderService.execute(
+                    command(new StockItem(RADIATOR_ID, 2)));
+
+            assertThat(result.consumed()).isTrue();
+            verify(consumeStockUseCase, never()).execute(any());
+        }
+
+        @Test
+        void shouldValidateBalanceOnlyForWhatIsStillPending() {
+            when(stockMovementRepository.findByServiceOrderId(SERVICE_ORDER_ID))
+                    .thenReturn(List.of(movement(RADIATOR_ID, MovementType.OUT, 4)));
+            when(repository.lockById(RADIATOR_ID)).thenReturn(Optional.of(persistedStock(RADIATOR_ID, "Radiador", 1)));
+
+            ConsumeByServiceOrderStockResult result = consumeByServiceOrderService.execute(
+                    command(new StockItem(RADIATOR_ID, 6)));
+
+            assertThat(result.missingItems()).containsExactly(new MissingStockItem(RADIATOR_ID, 2, 1));
+            verify(consumeStockUseCase, never()).execute(any());
+        }
     }
 
     @Nested
