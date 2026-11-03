@@ -20,7 +20,7 @@ public class AddStockService implements AddStockUseCase {
 
     @Override
     public Stock execute(AddStockCommand cmd) {
-        Stock stock = repository.findById(cmd.stockId())
+        Stock stock = repository.lockById(cmd.stockId())
                 .orElseThrow(() -> new StockNotFoundException(cmd.stockId()));
 
         Integer previousQuantity = stock.getQuantity();

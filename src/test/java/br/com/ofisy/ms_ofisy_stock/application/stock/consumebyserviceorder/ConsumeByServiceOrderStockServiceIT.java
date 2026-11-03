@@ -5,6 +5,8 @@ import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.Consu
 import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.ConsumeByServiceOrderStockUseCase.ConsumeByServiceOrderStockResult;
 import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.ConsumeByServiceOrderStockUseCase.MissingStockItem;
 import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.ConsumeByServiceOrderStockUseCase.StockItem;
+import br.com.ofisy.ms_ofisy_stock.application.stock.releasebyserviceorder.ReleaseByServiceOrderStockUseCase;
+import br.com.ofisy.ms_ofisy_stock.application.stock.releasebyserviceorder.ReleaseByServiceOrderStockUseCase.ReleaseByServiceOrderStockCommand;
 import br.com.ofisy.ms_ofisy_stock.domain.stock.Stock;
 import br.com.ofisy.ms_ofisy_stock.domain.stock.StockRepository;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.MovementType;
@@ -20,6 +22,11 @@ import org.springframework.context.annotation.Import;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -30,6 +37,9 @@ class ConsumeByServiceOrderStockServiceIT {
 
     @Autowired
     private ConsumeByServiceOrderStockUseCase consumeByServiceOrderStockUseCase;
+
+    @Autowired
+    private ReleaseByServiceOrderStockUseCase releaseByServiceOrderStockUseCase;
 
     @Autowired
     private StockRepository stockRepository;
@@ -58,6 +68,31 @@ class ConsumeByServiceOrderStockServiceIT {
     }
 
     @Test
+    void shouldConsumeOnlyOnceWhenSameServiceOrderIsConsumedTwice() {
+        ConsumeByServiceOrderStockCommand command = new ConsumeByServiceOrderStockCommand(serviceOrderId,
+                List.of(new StockItem(radiatorId, 4)));
+
+        consumeByServiceOrderStockUseCase.execute(command);
+        ConsumeByServiceOrderStockResult repeated = consumeByServiceOrderStockUseCase.execute(command);
+
+        assertThat(repeated.consumed()).isTrue();
+        assertThat(quantityOf(radiatorId)).isEqualTo(6);
+        assertThat(stockMovementRepository.findByServiceOrderId(serviceOrderId)).hasSize(1);
+    }
+
+    @Test
+    void shouldNotConsumeAgainAfterServiceOrderStockWasReleased() {
+        ConsumeByServiceOrderStockCommand command = new ConsumeByServiceOrderStockCommand(serviceOrderId,
+                List.of(new StockItem(radiatorId, 4)));
+        consumeByServiceOrderStockUseCase.execute(command);
+        releaseByServiceOrderStockUseCase.execute(new ReleaseByServiceOrderStockCommand(serviceOrderId));
+
+        consumeByServiceOrderStockUseCase.execute(command);
+
+        assertThat(quantityOf(radiatorId)).isEqualTo(10);
+    }
+
+    @Test
     void shouldConsumeAllItemsAndLinkMovementsToServiceOrder() {
         ConsumeByServiceOrderStockResult result = consumeByServiceOrderStockUseCase.execute(
                 new ConsumeByServiceOrderStockCommand(serviceOrderId,
@@ -71,6 +106,27 @@ class ConsumeByServiceOrderStockServiceIT {
                 .containsExactlyInAnyOrder(
                         tuple(radiatorId, MovementType.OUT, 4),
                         tuple(filterId, MovementType.OUT, 2));
+    }
+
+    @Test
+    void shouldNotLoseUpdatesWhenServiceOrdersConsumeTheSameItemConcurrently() throws Exception {
+        int serviceOrders = 8;
+        ExecutorService executor = Executors.newFixedThreadPool(serviceOrders);
+        try {
+            List<Future<ConsumeByServiceOrderStockResult>> results = executor.invokeAll(
+                    IntStream.range(0, serviceOrders)
+                            .mapToObj(i -> (Callable<ConsumeByServiceOrderStockResult>) () ->
+                                    consumeByServiceOrderStockUseCase.execute(new ConsumeByServiceOrderStockCommand(
+                                            UUID.randomUUID(), List.of(new StockItem(radiatorId, 1)))))
+                            .toList());
+            for (Future<ConsumeByServiceOrderStockResult> result : results) {
+                assertThat(result.get().consumed()).isTrue();
+            }
+        } finally {
+            executor.shutdown();
+        }
+
+        assertThat(quantityOf(radiatorId)).isEqualTo(2);
     }
 
     @Test

@@ -21,7 +21,7 @@ public class ConsumeStockService implements ConsumeStockUseCase {
 
     @Override
     public Stock execute(ConsumeStockCommand cmd) {
-        Stock stock = repository.findById(cmd.stockId())
+        Stock stock = repository.lockById(cmd.stockId())
                 .orElseThrow(() -> new StockNotFoundException(cmd.stockId()));
 
         if (cmd.quantity() != null && stock.getQuantity() < cmd.quantity()) {

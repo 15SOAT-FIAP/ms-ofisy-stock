@@ -40,4 +40,10 @@ public class StockRepositoryImpl implements StockRepository {
         return jpa.findByProductName(productName)
                 .map(StockMapper::toDomain);
     }
+
+    @Override
+    public Optional<Stock> lockById(UUID id) {
+        return jpa.findForUpdateById(id)
+                .map(StockMapper::toDomain);
+    }
 }
