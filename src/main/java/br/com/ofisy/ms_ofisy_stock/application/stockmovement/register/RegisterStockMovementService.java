@@ -20,7 +20,8 @@ public class RegisterStockMovementService implements RegisterStockMovementUseCas
                 cmd.type(),
                 cmd.quantity(),
                 cmd.previousQuantity(),
-                cmd.newQuantity()
+                cmd.newQuantity(),
+                cmd.serviceOrderId()
         );
         return repository.save(movement);
     }

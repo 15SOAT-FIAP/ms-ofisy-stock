@@ -15,6 +15,7 @@ public class StockMovementMapper {
                 entity.getQuantity(),
                 entity.getPreviousQuantity(),
                 entity.getNewQuantity(),
+                entity.getServiceOrderId(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
@@ -28,6 +29,7 @@ public class StockMovementMapper {
                 .quantity(domain.getQuantity())
                 .previousQuantity(domain.getPreviousQuantity())
                 .newQuantity(domain.getNewQuantity())
+                .serviceOrderId(domain.getServiceOrderId())
                 .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
                 .build();

@@ -45,6 +45,8 @@ public class StockMovementEntity {
     @Column(nullable = false)
     private Integer newQuantity;
 
+    private UUID serviceOrderId;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

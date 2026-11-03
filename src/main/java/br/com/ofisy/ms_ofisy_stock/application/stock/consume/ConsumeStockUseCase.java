@@ -9,7 +9,11 @@ public interface ConsumeStockUseCase {
 
     record ConsumeStockCommand(
             UUID stockId,
-            Integer quantity
+            Integer quantity,
+            UUID serviceOrderId
     ) {
+        public ConsumeStockCommand(UUID stockId, Integer quantity) {
+            this(stockId, quantity, null);
+        }
     }
 }

@@ -16,6 +16,7 @@ public class StockMovementPresenter {
                 stockMovement.getQuantity(),
                 stockMovement.getPreviousQuantity(),
                 stockMovement.getNewQuantity(),
+                stockMovement.getServiceOrderId(),
                 stockMovement.getCreatedAt(),
                 stockMovement.getUpdatedAt()
         );

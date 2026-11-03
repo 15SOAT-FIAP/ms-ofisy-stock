@@ -24,6 +24,7 @@ class StockMovementTest {
             assertThat(result.getQuantity()).isEqualTo(10);
             assertThat(result.getPreviousQuantity()).isEqualTo(90);
             assertThat(result.getNewQuantity()).isEqualTo(100);
+            assertThat(result.getServiceOrderId()).isNull();
         }
 
         @Test
@@ -37,6 +38,15 @@ class StockMovementTest {
             assertThat(result.getQuantity()).isEqualTo(10);
             assertThat(result.getPreviousQuantity()).isEqualTo(100);
             assertThat(result.getNewQuantity()).isEqualTo(90);
+        }
+
+        @Test
+        void shouldCreateMovementLinkedToServiceOrder() {
+            var serviceOrderId = UUID.randomUUID();
+
+            var result = StockMovement.create(UUID.randomUUID(), MovementType.OUT, 2, 10, 8, serviceOrderId);
+
+            assertThat(result.getServiceOrderId()).isEqualTo(serviceOrderId);
         }
 
         @Test
@@ -54,10 +64,11 @@ class StockMovementTest {
         void shouldRestoreAllFieldsFromPersistedData() {
             var id = UUID.randomUUID();
             var stockId = UUID.randomUUID();
+            var serviceOrderId = UUID.randomUUID();
             var createdAt = LocalDateTime.of(2026, 1, 10, 8, 0);
             var updatedAt = LocalDateTime.of(2026, 1, 10, 8, 0);
 
-            var result = StockMovement.reconstruct(id, stockId, MovementType.OUT, 5, 20, 15, createdAt, updatedAt);
+            var result = StockMovement.reconstruct(id, stockId, MovementType.OUT, 5, 20, 15, serviceOrderId, createdAt, updatedAt);
 
             assertThat(result.getId()).isEqualTo(id);
             assertThat(result.getStockId()).isEqualTo(stockId);
@@ -65,6 +76,7 @@ class StockMovementTest {
             assertThat(result.getQuantity()).isEqualTo(5);
             assertThat(result.getPreviousQuantity()).isEqualTo(20);
             assertThat(result.getNewQuantity()).isEqualTo(15);
+            assertThat(result.getServiceOrderId()).isEqualTo(serviceOrderId);
             assertThat(result.getCreatedAt()).isEqualTo(createdAt);
             assertThat(result.getUpdatedAt()).isEqualTo(updatedAt);
         }

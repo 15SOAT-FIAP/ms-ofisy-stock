@@ -20,7 +20,7 @@ public class ReleaseStockService implements ReleaseStockUseCase {
 
     @Override
     public Stock execute(ReleaseStockCommand cmd) {
-        Stock stock = repository.findById(cmd.stockId())
+        Stock stock = repository.lockById(cmd.stockId())
                 .orElseThrow(() -> new StockNotFoundException(cmd.stockId()));
 
         Integer previousQuantity = stock.getQuantity();
@@ -31,7 +31,8 @@ public class ReleaseStockService implements ReleaseStockUseCase {
                 MovementType.IN,
                 cmd.quantity(),
                 previousQuantity,
-                stock.getQuantity()
+                stock.getQuantity(),
+                cmd.serviceOrderId()
         ));
         return repository.save(stock);
     }

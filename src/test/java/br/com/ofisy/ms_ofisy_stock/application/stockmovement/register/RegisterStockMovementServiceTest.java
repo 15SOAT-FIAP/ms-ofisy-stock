@@ -43,8 +43,20 @@ class RegisterStockMovementServiceTest {
             assertThat(result.getQuantity()).isEqualTo(4);
             assertThat(result.getPreviousQuantity()).isEqualTo(10);
             assertThat(result.getNewQuantity()).isEqualTo(6);
+            assertThat(result.getServiceOrderId()).isNull();
             assertThat(result.getCreatedAt()).isNotNull();
             verify(repository).save(result);
+        }
+
+        @Test
+        void shouldKeepServiceOrderIdWhenInformed() {
+            var serviceOrderId = UUID.randomUUID();
+            when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            StockMovement result = registerService.execute(
+                    new RegisterStockMovementCommand(UUID.randomUUID(), MovementType.OUT, 4, 10, 6, serviceOrderId));
+
+            assertThat(result.getServiceOrderId()).isEqualTo(serviceOrderId);
         }
     }
 }

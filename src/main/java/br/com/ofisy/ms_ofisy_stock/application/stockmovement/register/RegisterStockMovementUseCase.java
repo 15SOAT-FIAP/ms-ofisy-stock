@@ -13,7 +13,12 @@ public interface RegisterStockMovementUseCase {
             MovementType type,
             Integer quantity,
             Integer previousQuantity,
-            Integer newQuantity
+            Integer newQuantity,
+            UUID serviceOrderId
     ) {
+        public RegisterStockMovementCommand(UUID stockId, MovementType type, Integer quantity,
+                                            Integer previousQuantity, Integer newQuantity) {
+            this(stockId, type, quantity, previousQuantity, newQuantity, null);
+        }
     }
 }

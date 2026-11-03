@@ -45,7 +45,7 @@ class AddStockServiceTest {
 
         @Test
         void shouldAddQuantityAndRegisterInMovement() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
             when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             Stock result = addService.execute(new AddStockCommand(STOCK_ID, 5));
@@ -58,7 +58,7 @@ class AddStockServiceTest {
 
         @Test
         void shouldThrowStockNotFoundExceptionWhenStockDoesNotExist() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.empty());
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> addService.execute(new AddStockCommand(STOCK_ID, 5)))
                     .isInstanceOf(StockNotFoundException.class);
@@ -69,7 +69,7 @@ class AddStockServiceTest {
 
         @Test
         void shouldNotRegisterMovementWhenQuantityIsInvalid() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
 
             assertThatThrownBy(() -> addService.execute(new AddStockCommand(STOCK_ID, 0)))
                     .isInstanceOf(InvalidStockQuantityException.class);

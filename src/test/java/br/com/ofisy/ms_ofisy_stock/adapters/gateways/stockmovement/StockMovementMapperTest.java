@@ -15,6 +15,7 @@ class StockMovementMapperTest {
     void shouldConvertEntityToDomain() {
         var id = UUID.randomUUID();
         var stockId = UUID.randomUUID();
+        var serviceOrderId = UUID.randomUUID();
         var createdAt = LocalDateTime.of(2026, 1, 10, 8, 0);
         var updatedAt = LocalDateTime.of(2026, 1, 10, 8, 0);
 
@@ -25,6 +26,7 @@ class StockMovementMapperTest {
                 .quantity(5)
                 .previousQuantity(20)
                 .newQuantity(15)
+                .serviceOrderId(serviceOrderId)
                 .createdAt(createdAt)
                 .updatedAt(updatedAt)
                 .build();
@@ -37,13 +39,14 @@ class StockMovementMapperTest {
         assertThat(result.getQuantity()).isEqualTo(5);
         assertThat(result.getPreviousQuantity()).isEqualTo(20);
         assertThat(result.getNewQuantity()).isEqualTo(15);
+        assertThat(result.getServiceOrderId()).isEqualTo(serviceOrderId);
         assertThat(result.getCreatedAt()).isEqualTo(createdAt);
         assertThat(result.getUpdatedAt()).isEqualTo(updatedAt);
     }
 
     @Test
     void shouldConvertDomainToEntity() {
-        var movement = StockMovement.create(UUID.randomUUID(), MovementType.IN, 10, 90, 100);
+        var movement = StockMovement.create(UUID.randomUUID(), MovementType.IN, 10, 90, 100, UUID.randomUUID());
 
         var result = StockMovementMapper.toEntity(movement);
 
@@ -53,6 +56,7 @@ class StockMovementMapperTest {
         assertThat(result.getQuantity()).isEqualTo(10);
         assertThat(result.getPreviousQuantity()).isEqualTo(90);
         assertThat(result.getNewQuantity()).isEqualTo(100);
+        assertThat(result.getServiceOrderId()).isEqualTo(movement.getServiceOrderId());
         assertThat(result.getCreatedAt()).isEqualTo(movement.getCreatedAt());
         assertThat(result.getUpdatedAt()).isEqualTo(movement.getUpdatedAt());
     }
