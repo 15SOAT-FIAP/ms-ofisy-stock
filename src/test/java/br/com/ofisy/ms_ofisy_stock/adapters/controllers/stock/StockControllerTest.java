@@ -15,13 +15,16 @@ import br.com.ofisy.ms_ofisy_stock.application.stock.update.UpdateStockUseCase;
 import br.com.ofisy.ms_ofisy_stock.application.stock.update.UpdateStockUseCase.UpdateStockCommand;
 import br.com.ofisy.ms_ofisy_stock.domain.exception.InvalidStockQuantityException;
 import br.com.ofisy.ms_ofisy_stock.domain.stock.Stock;
+import br.com.ofisy.ms_ofisy_stock.shared.jwt.JwtService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -42,6 +45,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(StockController.class)
+@AutoConfigureMockMvc(addFilters = false)
+@WithMockUser(roles = "STOCKMAN")
 class StockControllerTest {
 
     private static final String BASE_URL = "/api/v1/stocks";
@@ -49,6 +54,9 @@ class StockControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private JwtService jwtService;
 
     @MockitoBean
     private CreateStockUseCase createStockUseCase;

@@ -13,11 +13,15 @@ import java.util.UUID;
 @Tag(name = "API de Movimentação de Estoque")
 public interface StockMovementApi {
 
-    @Operation(summary = "Listar todas as movimentações de estoque com paginação")
+    @Operation(summary = "Listar todas as movimentações de estoque com paginação - Roles autorizadas: (ADMIN, STOCKMAN)")
     @ApiResponse(responseCode = "200", description = "Movimentações listadas com sucesso")
+    @ApiResponse(responseCode = "401", description = "Usuário não autenticado")
+    @ApiResponse(responseCode = "403", description = "Usuário sem permissão")
     ResponseEntity<Page<StockMovementResponseDTO>> getAllStockMovements(Pageable pageable);
 
-    @Operation(summary = "Listar as movimentações de um estoque com paginação")
+    @Operation(summary = "Listar as movimentações de um estoque com paginação - Roles autorizadas: (ADMIN, STOCKMAN)")
     @ApiResponse(responseCode = "200", description = "Movimentações listadas com sucesso")
+    @ApiResponse(responseCode = "401", description = "Usuário não autenticado")
+    @ApiResponse(responseCode = "403", description = "Usuário sem permissão")
     ResponseEntity<Page<StockMovementResponseDTO>> getByStockId(UUID stockId, Pageable pageable);
 }
