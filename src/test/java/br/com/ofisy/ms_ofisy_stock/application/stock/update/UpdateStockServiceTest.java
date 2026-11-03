@@ -41,7 +41,7 @@ class UpdateStockServiceTest {
 
         @Test
         void shouldUpdateStockWithCommandData() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
             when(repository.findByProductName("Radiador novo")).thenReturn(Optional.empty());
             when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -59,7 +59,7 @@ class UpdateStockServiceTest {
         @Test
         void shouldAllowKeepingTheSameProductName() {
             var stock = persistedStock(STOCK_ID, "Radiador", 10);
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(stock));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(stock));
             when(repository.findByProductName("Radiador")).thenReturn(Optional.of(stock));
             when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -72,7 +72,7 @@ class UpdateStockServiceTest {
 
         @Test
         void shouldNotLookUpProductNameWhenItIsNotInformed() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
             when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             updateService.execute(new UpdateStockCommand(STOCK_ID, null, null, null, "Motor", null));
@@ -82,7 +82,7 @@ class UpdateStockServiceTest {
 
         @Test
         void shouldThrowStockAlreadyExistsExceptionWhenNameBelongsToAnotherStock() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
             when(repository.findByProductName("Alternador"))
                     .thenReturn(Optional.of(persistedStock(UUID.randomUUID(), "Alternador", 4)));
 
@@ -95,7 +95,7 @@ class UpdateStockServiceTest {
 
         @Test
         void shouldThrowStockNotFoundExceptionWhenStockDoesNotExist() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.empty());
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> updateService.execute(
                     new UpdateStockCommand(STOCK_ID, "Radiador", null, null, null, null)))

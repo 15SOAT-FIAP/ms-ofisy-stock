@@ -9,10 +9,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 
 @Service
@@ -23,10 +23,11 @@ public class ConsumeByServiceOrderStockService implements ConsumeByServiceOrderS
     private final StockRepository repository;
     private final ConsumeStockUseCase consumeStockUseCase;
 
-    // Valida todos os itens antes de consumir: se algum faltar, nada sai do estoque
+    // Valida todos os itens antes de consumir: se algum faltar, nada sai do estoque.
+    // Os itens são travados em ordem de id, para duas OS com itens em comum não se bloquearem mutuamente
     @Override
     public ConsumeByServiceOrderStockResult execute(ConsumeByServiceOrderStockCommand cmd) {
-        Map<UUID, Integer> requestedByStock = new LinkedHashMap<>();
+        Map<UUID, Integer> requestedByStock = new TreeMap<>();
         for (StockItem item : cmd.items()) {
             if (item.quantity() == null || item.quantity() <= 0) {
                 throw new InvalidStockQuantityException(item.quantity());
@@ -49,7 +50,7 @@ public class ConsumeByServiceOrderStockService implements ConsumeByServiceOrderS
     }
 
     private Optional<MissingStockItem> findMissing(UUID stockId, Integer requestedQuantity) {
-        int availableQuantity = repository.findById(stockId)
+        int availableQuantity = repository.lockById(stockId)
                 .map(Stock::getQuantity)
                 .orElse(0);
         return availableQuantity < requestedQuantity

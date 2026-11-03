@@ -46,7 +46,7 @@ class ConsumeStockServiceTest {
 
         @Test
         void shouldConsumeQuantityAndRegisterOutMovement() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
             when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             Stock result = consumeService.execute(new ConsumeStockCommand(STOCK_ID, 4));
@@ -60,7 +60,7 @@ class ConsumeStockServiceTest {
         @Test
         void shouldRegisterOutMovementLinkedToServiceOrder() {
             var serviceOrderId = UUID.randomUUID();
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
             when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             consumeService.execute(new ConsumeStockCommand(STOCK_ID, 4, serviceOrderId));
@@ -71,7 +71,7 @@ class ConsumeStockServiceTest {
 
         @Test
         void shouldAllowConsumingAllAvailableQuantity() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
             when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             Stock result = consumeService.execute(new ConsumeStockCommand(STOCK_ID, 10));
@@ -81,7 +81,7 @@ class ConsumeStockServiceTest {
 
         @Test
         void shouldThrowInsufficientStockExceptionWhenQuantityIsGreaterThanAvailable() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
 
             assertThatThrownBy(() -> consumeService.execute(new ConsumeStockCommand(STOCK_ID, 11)))
                     .isInstanceOf(InsufficientStockException.class)
@@ -93,7 +93,7 @@ class ConsumeStockServiceTest {
 
         @Test
         void shouldThrowInvalidStockQuantityExceptionWhenQuantityIsNull() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 10)));
 
             assertThatThrownBy(() -> consumeService.execute(new ConsumeStockCommand(STOCK_ID, null)))
                     .isInstanceOf(InvalidStockQuantityException.class);
@@ -103,7 +103,7 @@ class ConsumeStockServiceTest {
 
         @Test
         void shouldThrowStockNotFoundExceptionWhenStockDoesNotExist() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.empty());
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> consumeService.execute(new ConsumeStockCommand(STOCK_ID, 4)))
                     .isInstanceOf(StockNotFoundException.class);

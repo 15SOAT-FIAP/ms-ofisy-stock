@@ -88,6 +88,17 @@ class StockRepositoryImplTest {
     }
 
     @Test
+    void shouldLockStockById() {
+        var id = UUID.randomUUID();
+        when(jpa.findForUpdateById(id)).thenReturn(Optional.of(persistedEntity(id)));
+
+        var result = repository.lockById(id);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getId()).isEqualTo(id);
+    }
+
+    @Test
     void shouldReturnEmptyWhenStockIsNotFoundById() {
         var id = UUID.randomUUID();
         when(jpa.findById(id)).thenReturn(Optional.empty());

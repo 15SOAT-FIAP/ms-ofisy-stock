@@ -44,7 +44,7 @@ class ReleaseStockServiceTest {
 
         @Test
         void shouldReturnQuantityToStockAndRegisterInMovement() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 6)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 6)));
             when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             Stock result = releaseService.execute(new ReleaseStockCommand(STOCK_ID, 4));
@@ -58,7 +58,7 @@ class ReleaseStockServiceTest {
         @Test
         void shouldRegisterInMovementLinkedToServiceOrder() {
             var serviceOrderId = UUID.randomUUID();
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 6)));
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.of(persistedStock(STOCK_ID, "Radiador", 6)));
             when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             releaseService.execute(new ReleaseStockCommand(STOCK_ID, 4, serviceOrderId));
@@ -69,7 +69,7 @@ class ReleaseStockServiceTest {
 
         @Test
         void shouldThrowStockNotFoundExceptionWhenStockDoesNotExist() {
-            when(repository.findById(STOCK_ID)).thenReturn(Optional.empty());
+            when(repository.lockById(STOCK_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> releaseService.execute(new ReleaseStockCommand(STOCK_ID, 4)))
                     .isInstanceOf(StockNotFoundException.class);
