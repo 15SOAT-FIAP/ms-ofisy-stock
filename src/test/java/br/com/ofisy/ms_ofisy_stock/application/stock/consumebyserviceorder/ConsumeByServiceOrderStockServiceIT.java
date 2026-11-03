@@ -5,6 +5,8 @@ import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.Consu
 import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.ConsumeByServiceOrderStockUseCase.ConsumeByServiceOrderStockResult;
 import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.ConsumeByServiceOrderStockUseCase.MissingStockItem;
 import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.ConsumeByServiceOrderStockUseCase.StockItem;
+import br.com.ofisy.ms_ofisy_stock.application.stock.releasebyserviceorder.ReleaseByServiceOrderStockUseCase;
+import br.com.ofisy.ms_ofisy_stock.application.stock.releasebyserviceorder.ReleaseByServiceOrderStockUseCase.ReleaseByServiceOrderStockCommand;
 import br.com.ofisy.ms_ofisy_stock.domain.stock.Stock;
 import br.com.ofisy.ms_ofisy_stock.domain.stock.StockRepository;
 import br.com.ofisy.ms_ofisy_stock.domain.stockmovement.MovementType;
@@ -37,6 +39,9 @@ class ConsumeByServiceOrderStockServiceIT {
     private ConsumeByServiceOrderStockUseCase consumeByServiceOrderStockUseCase;
 
     @Autowired
+    private ReleaseByServiceOrderStockUseCase releaseByServiceOrderStockUseCase;
+
+    @Autowired
     private StockRepository stockRepository;
 
     @Autowired
@@ -60,6 +65,31 @@ class ConsumeByServiceOrderStockServiceIT {
 
     private int quantityOf(UUID stockId) {
         return stockRepository.findById(stockId).orElseThrow().getQuantity();
+    }
+
+    @Test
+    void shouldConsumeOnlyOnceWhenSameServiceOrderIsConsumedTwice() {
+        ConsumeByServiceOrderStockCommand command = new ConsumeByServiceOrderStockCommand(serviceOrderId,
+                List.of(new StockItem(radiatorId, 4)));
+
+        consumeByServiceOrderStockUseCase.execute(command);
+        ConsumeByServiceOrderStockResult repeated = consumeByServiceOrderStockUseCase.execute(command);
+
+        assertThat(repeated.consumed()).isTrue();
+        assertThat(quantityOf(radiatorId)).isEqualTo(6);
+        assertThat(stockMovementRepository.findByServiceOrderId(serviceOrderId)).hasSize(1);
+    }
+
+    @Test
+    void shouldNotConsumeAgainAfterServiceOrderStockWasReleased() {
+        ConsumeByServiceOrderStockCommand command = new ConsumeByServiceOrderStockCommand(serviceOrderId,
+                List.of(new StockItem(radiatorId, 4)));
+        consumeByServiceOrderStockUseCase.execute(command);
+        releaseByServiceOrderStockUseCase.execute(new ReleaseByServiceOrderStockCommand(serviceOrderId));
+
+        consumeByServiceOrderStockUseCase.execute(command);
+
+        assertThat(quantityOf(radiatorId)).isEqualTo(10);
     }
 
     @Test
