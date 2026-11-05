@@ -93,7 +93,7 @@ O `StockRefunded` sai mesmo quando não há nada a devolver, como numa OS sem co
 | Evento          | Quando é publicado                                                    | Quem reage          |
 |-----------------|-----------------------------------------------------------------------|---------------------|
 | `StockRefunded` | Sempre que um `AllExecutionsCancelled` novo é processado              | billing e core      |
-| `StockLow`      | A cada consumo que deixa o saldo de um item igual ou abaixo do mínimo | core e notification |
+| `StockLow`      | A cada consumo que deixa o saldo de um item igual ou abaixo do mínimo | notification        |
 
 #### `StockLow`
 
