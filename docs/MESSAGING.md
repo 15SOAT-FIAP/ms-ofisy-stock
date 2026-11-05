@@ -10,8 +10,8 @@ A estrutura é a mesma do core e do `ms-ofisy-execution`: mesmo envelope, mesmo 
 
 ```mermaid
 flowchart LR
-    core[core] -->|publica| soTopic[(SNS<br/>ofisy-service-order-events.fifo)]
-    soTopic -->|assinatura<br/>filtro type = ServiceOrderCancelled<br/>raw delivery| queue[(SQS<br/>ofisy-stock.fifo)]
+    execution[ms-ofisy-execution] -->|publica| execTopic[(SNS<br/>ofisy-execution-events.fifo)]
+    execTopic -->|assinatura<br/>filtro type = AllExecutionsCancelled<br/>raw delivery| queue[(SQS<br/>ofisy-stock.fifo)]
     queue --> app[ms-ofisy-stock]
     queue -->|após 5 recebimentos| dlq[(SQS<br/>ofisy-stock-dlq.fifo)]
     app -->|outbox + publisher| topic[(SNS<br/>ofisy-stock-events.fifo)]
@@ -20,8 +20,8 @@ flowchart LR
 
 | Recurso          | Nome                              | Observação                                                                                                   |
 |------------------|-----------------------------------|--------------------------------------------------------------------------------------------------------------|
-| Tópico           | `ofisy-service-order-events.fifo` | Eventos da OS, publicados pelo core na AWS. Localmente é criado só para exercitar o fluxo                    |
-| Assinatura       | tópico da OS → fila               | Com `RawMessageDelivery=true` e `FilterPolicy` aplicada ao corpo da mensagem (`MessageBody`)                 |
+| Tópico           | `ofisy-execution-events.fifo`     | Eventos de execução, publicados pelo `ms-ofisy-execution` na AWS. Localmente é criado só para exercitar o fluxo |
+| Assinatura       | tópico de execução → fila         | Com `RawMessageDelivery=true` e `FilterPolicy` aplicada ao corpo da mensagem (`MessageBody`)                 |
 | Fila             | `ofisy-stock.fifo`                | Configurada em `ofisy.messaging.queues.stock` (`application.yaml`)                                           |
 | DLQ              | `ofisy-stock-dlq.fifo`            | `RedrivePolicy` com `maxReceiveCount=5`                                                                      |
 | Tópico           | `ofisy-stock-events.fifo`         | Tópico deste ms, configurado em `ofisy.messaging.topics.stock`                                               |
@@ -59,42 +59,44 @@ Todo evento segue o mesmo envelope (`adapters/listeners/dto/EventEnvelope.java`)
 
 ### Eventos consumidos
 
-| Evento                  | Produtor | Efeito                                                                                     |
-|-------------------------|----------|--------------------------------------------------------------------------------------------|
-| `ServiceOrderCancelled` | core     | Devolve ao estoque o que saiu para a OS e ainda não voltou, e publica o `StockRefunded`    |
+| Evento                   | Produtor           | Efeito                                                                                  |
+|--------------------------|--------------------|-----------------------------------------------------------------------------------------|
+| `AllExecutionsCancelled` | ms-ofisy-execution | Devolve ao estoque o que saiu para a OS e ainda não voltou, e publica o `StockRefunded` |
 
-#### `ServiceOrderCancelled`
+#### `AllExecutionsCancelled`
+
+Quando a OS é cancelada, o core publica o `ServiceOrderCancelled`, o execution cancela as execuções ativas e publica o `AllExecutionsCancelled`, e só então o estoque devolve os itens. Seguindo essa ordem, o `StockRefunded`, e o `QuoteCancelled` que o billing publica a partir dele, marcam o fim da compensação.
 
 O payload vem vazio: o id da OS está no `serviceOrderId` do envelope, e o estoque já sabe o que saiu para cada OS pelas movimentações (`stock_movements.service_order_id`).
 
 ```json
 {
   "eventId": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
-  "type": "ServiceOrderCancelled",
+  "type": "AllExecutionsCancelled",
   "serviceOrderId": "c3d4e5f6-a7b8-9012-cdef-123456780001",
   "occurredAt": "2026-10-20T10:00:00Z",
   "payload": {}
 }
 ```
 
-O `ServiceOrderCancelledHandler` chama o `RefundByServiceOrderStockUseCase`, que, na mesma transação:
+O `AllExecutionsCancelledHandler` chama o `RefundByServiceOrderStockUseCase`, que, na mesma transação:
 
 1. descarta o evento se o `eventId` já estiver em `processed_events`;
 2. devolve, por item, o que saiu para a OS menos o que já voltou (`ReleaseByServiceOrderStockUseCase`);
-3. grava o `StockRefunded` no outbox, se algum item foi devolvido;
+3. grava o `StockRefunded` no outbox;
 4. registra o `eventId` em `processed_events`.
 
-Uma OS sem consumo, ou que já teve os itens devolvidos (por exemplo, por uma reprovação do orçamento), não tem nada a devolver: o evento é registrado como processado e nenhum `StockRefunded` é publicado.
+O `StockRefunded` sai mesmo quando não há nada a devolver, como numa OS sem consumo ou que já teve os itens devolvidos por uma reprovação do orçamento. Nesse caso a lista de itens vai vazia. O billing e o core seguem a saga a partir desse evento, então sem ele o orçamento ou a OS ficariam sem desfecho.
 
 ### Eventos publicados
 
-| Evento          | Quando é publicado                                                      | Quem reage |
-|-----------------|-------------------------------------------------------------------------|------------|
-| `StockRefunded` | Quando itens de uma OS voltam ao estoque, depois do `ServiceOrderCancelled` | core       |
+| Evento          | Quando é publicado                                       | Quem reage    |
+|-----------------|----------------------------------------------------------|---------------|
+| `StockRefunded` | Sempre que um `AllExecutionsCancelled` novo é processado | billing, core |
 
 #### `StockRefunded`
 
-Agrupado pela OS. O payload lista o que voltou para o estoque:
+Agrupado pela OS. O payload lista o que voltou para o estoque, com `items` vazio quando nada voltou:
 
 ```json
 {
@@ -203,10 +205,10 @@ O `TestcontainersConfiguration` sobe um LocalStack com o mesmo `01-messaging.sh`
 |---------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
 | `OutboxEventPublisherTest`            | Envelope FIFO, ordem, `published_at`, grupo dos eventos sem OS e o salto do grupo que falhou                                                      |
 | `StockEventsListenerTest`             | Despacho pelo `type`, tipo sem handler, falha do handler e `type` duplicado entre handlers                                                       |
-| `ServiceOrderCancelledHandlerTest`    | Conversão do envelope no comando de devolução                                                                                                    |
-| `RefundByServiceOrderStockServiceTest`| Devolução, `StockRefunded` só quando algo voltou, registro em `processed_events`, evento repetido e falha sem efeitos                            |
+| `AllExecutionsCancelledHandlerTest`   | Conversão do envelope no comando de devolução                                                                                                    |
+| `RefundByServiceOrderStockServiceTest`| Devolução, `StockRefunded` com e sem itens devolvidos, registro em `processed_events`, evento repetido e falha sem efeitos                       |
 | `OutboxEventPublisherIT`              | Eventos com e sem OS gravados no outbox chegam na fila de inspeção e ficam publicados                                                             |
-| `StockEventsListenerIT`               | Evento sem handler é confirmado; `ServiceOrderCancelled` repetido devolve uma vez só e grava um `StockRefunded`; OS sem consumo não gera evento; evento publicado no tópico do core chega pela assinatura |
+| `StockEventsListenerIT`               | Evento sem handler é confirmado; `AllExecutionsCancelled` repetido devolve uma vez só e grava um `StockRefunded`; OS sem consumo gera `StockRefunded` com `items` vazio; evento publicado no tópico do execution chega pela assinatura |
 
 ---
 
@@ -216,7 +218,7 @@ Com `make dev-up` e `make run`:
 
 | Comando                                                      | O que faz                                                         |
 |--------------------------------------------------------------|-------------------------------------------------------------------|
-| `make event-service-order-cancelled SERVICE_ORDER_ID=<uuid>` | Publica um `ServiceOrderCancelled` no tópico de OS, como o core   |
+| `make event-all-executions-cancelled SERVICE_ORDER_ID=<uuid>` | Publica um `AllExecutionsCancelled` no tópico de execução, como o execution |
 | `make db-movements SERVICE_ORDER_ID=<uuid>`                  | Lista as movimentações de uma OS                                  |
 | `make events-peek`         | Lista os eventos publicados no tópico, pela fila de inspeção      |
 | `make queue-status`        | Mostra quantas mensagens há na fila e na DLQ                      |
