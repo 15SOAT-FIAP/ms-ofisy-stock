@@ -127,7 +127,7 @@ O `StockRefunded` sai mesmo quando não há nada a devolver, como numa OS sem co
 | `StockConsumed`          | Depois de um `QuoteCreated` em que todos os itens foram consumidos    | billing             |
 | `StockConsumptionFailed` | Depois de um `QuoteCreated` em que algum item não tinha saldo         | billing             |
 | `StockRefunded`          | Sempre que um `AllExecutionsCancelled` novo é processado              | billing e core      |
-| `StockLow`               | A cada consumo que deixa o saldo de um item igual ou abaixo do mínimo | core e notification |
+| `StockLow`               | A cada consumo que deixa o saldo de um item igual ou abaixo do mínimo | notification        |
 
 O billing usa só o `serviceOrderId` do envelope no `StockConsumed`, no `StockConsumptionFailed` e no `StockRefunded`. Os payloads ficam como referência para quem precisar.
 
