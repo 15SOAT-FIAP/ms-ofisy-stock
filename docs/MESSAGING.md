@@ -11,7 +11,7 @@ A estrutura é a mesma do core e do `ms-ofisy-execution`: mesmo envelope, mesmo 
 ```mermaid
 flowchart LR
     billing[ms-ofisy-billing] -->|publica| billingTopic[(SNS<br/>ofisy-billing-events.fifo)]
-    billingTopic -->|assinatura<br/>filtro type = QuoteCreated<br/>raw delivery| queue[(SQS<br/>ofisy-stock.fifo)]
+    billingTopic -->|assinatura<br/>filtro type = QuoteCreated, QuoteReproved<br/>raw delivery| queue[(SQS<br/>ofisy-stock.fifo)]
     execution[ms-ofisy-execution] -->|publica| execTopic[(SNS<br/>ofisy-execution-events.fifo)]
     execTopic -->|assinatura<br/>filtro type = AllExecutionsCancelled<br/>raw delivery| queue
     queue --> app[ms-ofisy-stock]
@@ -63,6 +63,7 @@ Todo evento segue o mesmo envelope (`adapters/listeners/dto/EventEnvelope.java`)
 | Evento                   | Produtor           | Efeito                                                                                  |
 |--------------------------|--------------------|-----------------------------------------------------------------------------------------|
 | `QuoteCreated`           | ms-ofisy-billing   | Consome os itens do orçamento e publica o `StockConsumed` ou o `StockConsumptionFailed` |
+| `QuoteReproved`          | ms-ofisy-billing   | Devolve ao estoque o que saiu para a OS e ainda não voltou, e publica o `StockRefunded` |
 | `AllExecutionsCancelled` | ms-ofisy-execution | Devolve ao estoque o que saiu para a OS e ainda não voltou, e publica o `StockRefunded` |
 
 #### `QuoteCreated`
@@ -95,6 +96,28 @@ Falta de saldo, ou um item que não existe, não é erro: o evento é processado
 
 O consumo por OS desconta o que já saiu para ela, então um segundo `QuoteCreated` da mesma OS, com outro `eventId`, não consome os itens de novo.
 
+#### `QuoteReproved`
+
+O billing publica quando o cliente reprova o orçamento. O estoque devolve os itens da OS e publica o `StockRefunded`, que é o que leva o core a cancelar a OS nesse caminho.
+
+```json
+{
+  "eventId": "7d8e9f0a-1b2c-4d3e-9f4a-5b6c7d8e9f0a",
+  "type": "QuoteReproved",
+  "serviceOrderId": "c3d4e5f6-a7b8-9012-cdef-123456780001",
+  "occurredAt": "2026-11-02T11:00:00Z",
+  "payload": {
+    "quoteId": "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
+    "reason": "Valor acima do esperado",
+    "stockItems": [
+      { "stockId": "a1b2c3d4-e5f6-7890-abcd-ef1234560101", "quantity": 2 }
+    ]
+  }
+}
+```
+
+O payload é ignorado. Assim como no `AllExecutionsCancelled`, o `QuoteReprovedHandler` chama o `RefundByServiceOrderStockUseCase` só com o id da OS, e a devolução segue as movimentações (`stock_movements.service_order_id`). Elas dizem o que saiu de fato, o que evita devolver um item que nunca foi consumido.
+
 #### `AllExecutionsCancelled`
 
 Quando a OS é cancelada, o core publica o `ServiceOrderCancelled`, o execution cancela as execuções ativas e publica o `AllExecutionsCancelled`, e só então o estoque devolve os itens. Seguindo essa ordem, o `StockRefunded`, e o `QuoteCancelled` que o billing publica a partir dele, marcam o fim da compensação.
@@ -118,7 +141,7 @@ O `AllExecutionsCancelledHandler` chama o `RefundByServiceOrderStockUseCase`, qu
 3. grava o `StockRefunded` no outbox;
 4. registra o `eventId` em `processed_events`.
 
-O `StockRefunded` sai mesmo quando não há nada a devolver, como numa OS sem consumo ou que já teve os itens devolvidos por uma reprovação do orçamento. Nesse caso a lista de itens vai vazia. O billing e o core seguem a saga a partir desse evento, então sem ele o orçamento ou a OS ficariam sem desfecho.
+O `StockRefunded` sai mesmo quando não há nada a devolver, como numa OS sem consumo ou que já teve os itens devolvidos por uma reprovação do orçamento. Isso vale para o `QuoteReproved` e para o `AllExecutionsCancelled`. Nesse caso a lista de itens vai vazia. O billing e o core seguem a saga a partir desse evento, então sem ele o orçamento ou a OS ficariam sem desfecho.
 
 ### Eventos publicados
 
@@ -126,7 +149,7 @@ O `StockRefunded` sai mesmo quando não há nada a devolver, como numa OS sem co
 |--------------------------|-----------------------------------------------------------------------|---------------------|
 | `StockConsumed`          | Depois de um `QuoteCreated` em que todos os itens foram consumidos    | billing             |
 | `StockConsumptionFailed` | Depois de um `QuoteCreated` em que algum item não tinha saldo         | billing             |
-| `StockRefunded`          | Sempre que um `AllExecutionsCancelled` novo é processado              | billing e core      |
+| `StockRefunded`          | Sempre que um `QuoteReproved` ou `AllExecutionsCancelled` novo é processado | billing e core |
 | `StockLow`               | A cada consumo que deixa o saldo de um item igual ou abaixo do mínimo | core e notification |
 
 O billing usa só o `serviceOrderId` do envelope no `StockConsumed`, no `StockConsumptionFailed` e no `StockRefunded`. Os payloads ficam como referência para quem precisar.
@@ -303,10 +326,11 @@ O `TestcontainersConfiguration` sobe um LocalStack com o mesmo `01-messaging.sh`
 | `StockEventsListenerTest`             | Despacho pelo `type`, tipo sem handler, falha do handler e `type` duplicado entre handlers                                                       |
 | `QuoteCreatedHandlerTest`             | Conversão do envelope e do payload no comando de consumo, campos extras ignorados e rejeição de evento sem OS, payload, `quoteId` ou `stockItems` |
 | `ConsumeByQuoteStockServiceTest`      | `StockConsumed` ou `StockConsumptionFailed` conforme o resultado do consumo, registro em `processed_events`, evento repetido e falha sem efeitos |
+| `QuoteReprovedHandlerTest`            | Conversão do envelope no comando de devolução                                                                                                    |
 | `AllExecutionsCancelledHandlerTest`   | Conversão do envelope no comando de devolução                                                                                                    |
 | `RefundByServiceOrderStockServiceTest`| Devolução, `StockRefunded` com e sem itens devolvidos, registro em `processed_events`, evento repetido e falha sem efeitos                       |
 | `OutboxEventPublisherIT`              | Eventos com e sem OS gravados no outbox chegam na fila de inspeção e ficam publicados                                                             |
-| `StockEventsListenerIT`               | Evento sem handler é confirmado; `QuoteCreated` repetido consome uma vez só e grava um `StockConsumed`; `QuoteCreated` sem saldo grava o `StockConsumptionFailed` e mantém o saldo; evento publicado no tópico do billing chega pela assinatura; `AllExecutionsCancelled` repetido devolve uma vez só e grava um `StockRefunded`; OS sem consumo gera `StockRefunded` com `items` vazio; evento publicado no tópico do execution chega pela assinatura |
+| `StockEventsListenerIT`               | Evento sem handler é confirmado; `QuoteCreated` repetido consome uma vez só e grava um `StockConsumed`; `QuoteCreated` sem saldo grava o `StockConsumptionFailed` e mantém o saldo; evento publicado no tópico do billing chega pela assinatura; `QuoteReproved` devolve os itens e grava o `StockRefunded`; reprovação seguida de cancelamento devolve uma vez só, com o segundo `StockRefunded` vazio; `AllExecutionsCancelled` repetido devolve uma vez só e grava um `StockRefunded`; OS sem consumo gera `StockRefunded` com `items` vazio; evento publicado no tópico do execution chega pela assinatura |
 
 ---
 
@@ -317,6 +341,7 @@ Com `make dev-up` e `make run`:
 | Comando                                                      | O que faz                                                         |
 |--------------------------------------------------------------|-------------------------------------------------------------------|
 | `make event-quote-created SERVICE_ORDER_ID=<uuid> STOCK_ID=<uuid> QUANTITY=<n>` | Publica um `QuoteCreated` com um item no tópico do billing, como o billing. Aceita `QUOTE_ID` |
+| `make event-quote-reproved SERVICE_ORDER_ID=<uuid>` | Publica um `QuoteReproved` no tópico do billing, como o billing. Aceita `QUOTE_ID` |
 | `make event-all-executions-cancelled SERVICE_ORDER_ID=<uuid>` | Publica um `AllExecutionsCancelled` no tópico de execução, como o execution |
 | `make db-movements SERVICE_ORDER_ID=<uuid>`                  | Lista as movimentações de uma OS                                  |
 | `make events-peek`         | Lista os eventos publicados no tópico, pela fila de inspeção      |
