@@ -90,9 +90,31 @@ O `StockRefunded` sai mesmo quando não há nada a devolver, como numa OS sem co
 
 ### Eventos publicados
 
-| Evento          | Quando é publicado                                       | Quem reage    |
-|-----------------|----------------------------------------------------------|---------------|
-| `StockRefunded` | Sempre que um `AllExecutionsCancelled` novo é processado | billing, core |
+| Evento          | Quando é publicado                                                    | Quem reage          |
+|-----------------|-----------------------------------------------------------------------|---------------------|
+| `StockRefunded` | Sempre que um `AllExecutionsCancelled` novo é processado              | billing e core      |
+| `StockLow`      | A cada consumo que deixa o saldo de um item igual ou abaixo do mínimo | notification        |
+
+#### `StockLow`
+
+Gravado pelo `ConsumeStockService`, na mesma transação da baixa, então vale tanto para o consumo pela API quanto para o consumo por OS. Como no core, o aviso sai a cada consumo enquanto o saldo estiver igual ou abaixo do mínimo, não só na primeira vez.
+
+O aviso não pertence a uma OS: o envelope sai com `serviceOrderId` nulo e o `message-group-id` é o id do item. O payload segue o contrato que o notification já consome:
+
+```json
+{
+  "eventId": "1c2d3e4f-5a6b-7c8d-9e0f-a1b2c3d4e5f6",
+  "type": "StockLow",
+  "serviceOrderId": null,
+  "occurredAt": "2026-10-20T10:00:00Z",
+  "payload": {
+    "stockId": "a1b2c3d4-e5f6-7890-abcd-ef1234560101",
+    "productName": "Radiador",
+    "currentQuantity": 2,
+    "minThreshold": 2
+  }
+}
+```
 
 #### `StockRefunded`
 

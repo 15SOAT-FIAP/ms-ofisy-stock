@@ -1,6 +1,8 @@
 package br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder;
 
 import br.com.ofisy.ms_ofisy_stock.TestcontainersConfiguration;
+import br.com.ofisy.ms_ofisy_stock.adapters.gateways.messaging.JpaOutboxEventRepository;
+import br.com.ofisy.ms_ofisy_stock.adapters.gateways.messaging.OutboxEventEntity;
 import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.ConsumeByServiceOrderStockUseCase.ConsumeByServiceOrderStockCommand;
 import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.ConsumeByServiceOrderStockUseCase.ConsumeByServiceOrderStockResult;
 import br.com.ofisy.ms_ofisy_stock.application.stock.consumebyserviceorder.ConsumeByServiceOrderStockUseCase.MissingStockItem;
@@ -18,6 +20,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -40,6 +45,12 @@ class ConsumeByServiceOrderStockServiceIT {
 
     @Autowired
     private ReleaseByServiceOrderStockUseCase releaseByServiceOrderStockUseCase;
+
+    @Autowired
+    private JpaOutboxEventRepository jpaOutboxEventRepository;
+
+    @Autowired
+    private JsonMapper jsonMapper;
 
     @Autowired
     private StockRepository stockRepository;
@@ -65,6 +76,26 @@ class ConsumeByServiceOrderStockServiceIT {
 
     private int quantityOf(UUID stockId) {
         return stockRepository.findById(stockId).orElseThrow().getQuantity();
+    }
+
+    @Test
+    void shouldRecordStockLowOnlyForItemsThatReachMinThreshold() {
+        consumeByServiceOrderStockUseCase.execute(new ConsumeByServiceOrderStockCommand(serviceOrderId,
+                List.of(new StockItem(radiatorId, 4), new StockItem(filterId, 2))));
+
+        List<OutboxEventEntity> stockLowEvents = jpaOutboxEventRepository.findAll().stream()
+                .filter(event -> "StockLow".equals(event.getEventType()))
+                .filter(event -> List.of(radiatorId, filterId).contains(event.getMessageGroupId()))
+                .toList();
+        assertThat(stockLowEvents).hasSize(1);
+        OutboxEventEntity event = stockLowEvents.getFirst();
+        assertThat(event.getMessageGroupId()).isEqualTo(filterId);
+        assertThat(event.getServiceOrderId()).isNull();
+        JsonNode payload = jsonMapper.readTree(event.getPayload());
+        assertThat(payload.get("stockId").asString()).isEqualTo(filterId.toString());
+        assertThat(payload.get("productName").asString()).startsWith("Produto ");
+        assertThat(payload.get("currentQuantity").asInt()).isZero();
+        assertThat(payload.get("minThreshold").asInt()).isEqualTo(1);
     }
 
     @Test
