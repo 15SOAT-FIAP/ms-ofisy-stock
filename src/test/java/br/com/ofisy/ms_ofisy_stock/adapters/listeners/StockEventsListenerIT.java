@@ -114,7 +114,7 @@ class StockEventsListenerIT {
         }
 
         @Test
-        void shouldNotPublishStockRefundedWhenServiceOrderHasNothingToRefund() {
+        void shouldPublishStockRefundedWithEmptyItemsWhenServiceOrderHasNothingToRefund() {
             UUID eventId = UUID.randomUUID();
             UUID serviceOrderId = UUID.randomUUID();
             String queueUrl = queueUrl();
@@ -125,7 +125,10 @@ class StockEventsListenerIT {
                 assertThat(pendingMessages(queueUrl)).isZero();
                 assertThat(processedEventRepository.existsById(eventId)).isTrue();
             });
-            assertThat(outboxEventsOf(serviceOrderId)).isEmpty();
+            List<OutboxEventEntity> refunds = outboxEventsOf(serviceOrderId);
+            assertThat(refunds).hasSize(1);
+            assertThat(refunds.getFirst().getEventType()).isEqualTo("StockRefunded");
+            assertThat(jsonMapper.readTree(refunds.getFirst().getPayload()).get("items")).isEmpty();
         }
 
         @Test

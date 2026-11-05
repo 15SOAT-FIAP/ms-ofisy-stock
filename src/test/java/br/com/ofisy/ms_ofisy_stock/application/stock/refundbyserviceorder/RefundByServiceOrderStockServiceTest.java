@@ -86,12 +86,14 @@ class RefundByServiceOrderStockServiceTest {
         }
 
         @Test
-        void shouldNotRecordStockRefundedWhenNothingWasReleased() {
+        void shouldRecordStockRefundedWithEmptyItemsWhenNothingWasReleased() {
             when(releaseByServiceOrderStockUseCase.execute(RELEASE_COMMAND)).thenReturn(List.of());
 
             refundService.execute(COMMAND);
 
-            verifyNoInteractions(outboxEventRepository);
+            verify(outboxEventRepository).save(outboxEventCaptor.capture());
+            assertThat(outboxEventCaptor.getValue().getEventType()).isEqualTo(RefundByServiceOrderStockService.STOCK_REFUNDED);
+            assertThat(outboxEventCaptor.getValue().getPayload()).isEqualTo(new StockRefundedPayload(List.of()));
         }
 
         @Test
