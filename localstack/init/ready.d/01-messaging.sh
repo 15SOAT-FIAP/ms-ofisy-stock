@@ -36,6 +36,19 @@ awslocal sns subscribe \
   --notification-endpoint "$QUEUE_ARN" \
   --attributes '{"RawMessageDelivery":"true","FilterPolicyScope":"MessageBody","FilterPolicy":"{\"type\":[\"AllExecutionsCancelled\"]}"}'
 
+# Na AWS o tópico de eventos do orçamento pertence ao ms-ofisy-billing; aqui ele é criado só para exercitar o fluxo localmente
+
+BILLING_TOPIC_ARN=$(awslocal sns create-topic \
+  --name ofisy-billing-events.fifo \
+  --attributes FifoTopic=true \
+  --query TopicArn --output text)
+
+awslocal sns subscribe \
+  --topic-arn "$BILLING_TOPIC_ARN" \
+  --protocol sqs \
+  --notification-endpoint "$QUEUE_ARN" \
+  --attributes '{"RawMessageDelivery":"true","FilterPolicyScope":"MessageBody","FilterPolicy":"{\"type\":[\"QuoteCreated\"]}"}'
+
 # Tópico de eventos publicados por este ms. A fila de inspeção existe só localmente, para ver o que foi publicado
 
 STOCK_TOPIC_ARN=$(awslocal sns create-topic \
