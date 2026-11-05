@@ -1,5 +1,5 @@
 .PHONY: help dev-up dev-down run test verify token \
-	event-all-executions-cancelled \
+	event-all-executions-cancelled event-quote-created \
 	queue-status dlq-peek dlq-redrive dlq-purge events-peek \
 	db-movements db-processed-events db-outbox
 
@@ -10,6 +10,8 @@ AWS := docker exec $(LOCALSTACK_CONTAINER) awslocal
 QUEUE_NAME := ofisy-stock.fifo
 DLQ_NAME := ofisy-stock-dlq.fifo
 INSPECT_QUEUE_NAME := ofisy-stock-events-inspect.fifo
+# Só é calculado se o target usar e o QUOTE_ID não for informado
+QUOTE_ID ?= $(shell od -An -N16 -tx1 /dev/urandom | tr -d ' \n' | sed -E 's/(.{8})(.{4})(.{4})(.{4})(.{12})/\1-\2-\3-\4-\5/')
 QUEUE_ARN := arn:aws:sqs:us-east-1:000000000000:$(QUEUE_NAME)
 DLQ_ARN := arn:aws:sqs:us-east-1:000000000000:$(DLQ_NAME)
 
@@ -42,6 +44,14 @@ event-all-executions-cancelled: ## Publica um AllExecutionsCancelled no tópico 
 	@test -n "$(SERVICE_ORDER_ID)" || (echo "Informe SERVICE_ORDER_ID=<uuid>" && exit 1)
 	@LOCALSTACK_CONTAINER=$(LOCALSTACK_CONTAINER) EVENT_ID=$(EVENT_ID) SERVICE_ORDER_ID=$(SERVICE_ORDER_ID) \
 	TOPIC=ofisy-execution-events.fifo TYPE=AllExecutionsCancelled scripts/publish-event.sh
+
+event-quote-created: ## Publica um QuoteCreated com um item no tópico do billing (SERVICE_ORDER_ID, STOCK_ID e QUANTITY obrigatórios, QUOTE_ID e EVENT_ID opcionais)
+	@test -n "$(SERVICE_ORDER_ID)" || (echo "Informe SERVICE_ORDER_ID=<uuid>" && exit 1)
+	@test -n "$(STOCK_ID)" || (echo "Informe STOCK_ID=<uuid>" && exit 1)
+	@test -n "$(QUANTITY)" || (echo "Informe QUANTITY=<quantidade>" && exit 1)
+	@LOCALSTACK_CONTAINER=$(LOCALSTACK_CONTAINER) EVENT_ID=$(EVENT_ID) SERVICE_ORDER_ID=$(SERVICE_ORDER_ID) \
+	PAYLOAD='{"quoteId":"$(QUOTE_ID)","stockItems":[{"stockId":"$(STOCK_ID)","quantity":$(QUANTITY)}]}' \
+	TOPIC=ofisy-billing-events.fifo TYPE=QuoteCreated scripts/publish-event.sh
 
 queue-status: ## Mostra quantas mensagens há na fila e na DLQ
 	@for q in $(QUEUE_NAME) $(DLQ_NAME); do \

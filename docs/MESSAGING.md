@@ -10,8 +10,10 @@ A estrutura é a mesma do core e do `ms-ofisy-execution`: mesmo envelope, mesmo 
 
 ```mermaid
 flowchart LR
+    billing[ms-ofisy-billing] -->|publica| billingTopic[(SNS<br/>ofisy-billing-events.fifo)]
+    billingTopic -->|assinatura<br/>filtro type = QuoteCreated<br/>raw delivery| queue[(SQS<br/>ofisy-stock.fifo)]
     execution[ms-ofisy-execution] -->|publica| execTopic[(SNS<br/>ofisy-execution-events.fifo)]
-    execTopic -->|assinatura<br/>filtro type = AllExecutionsCancelled<br/>raw delivery| queue[(SQS<br/>ofisy-stock.fifo)]
+    execTopic -->|assinatura<br/>filtro type = AllExecutionsCancelled<br/>raw delivery| queue
     queue --> app[ms-ofisy-stock]
     queue -->|após 5 recebimentos| dlq[(SQS<br/>ofisy-stock-dlq.fifo)]
     app -->|outbox + publisher| topic[(SNS<br/>ofisy-stock-events.fifo)]
@@ -20,14 +22,13 @@ flowchart LR
 
 | Recurso          | Nome                              | Observação                                                                                                   |
 |------------------|-----------------------------------|--------------------------------------------------------------------------------------------------------------|
+| Tópico           | `ofisy-billing-events.fifo`       | Eventos do orçamento, publicados pelo `ms-ofisy-billing` na AWS. Localmente é criado só para exercitar o fluxo |
 | Tópico           | `ofisy-execution-events.fifo`     | Eventos de execução, publicados pelo `ms-ofisy-execution` na AWS. Localmente é criado só para exercitar o fluxo |
-| Assinatura       | tópico de execução → fila         | Com `RawMessageDelivery=true` e `FilterPolicy` aplicada ao corpo da mensagem (`MessageBody`)                 |
+| Assinaturas      | tópicos → fila                    | Uma por tópico, com `RawMessageDelivery=true` e `FilterPolicy` aplicada ao corpo da mensagem (`MessageBody`) |
 | Fila             | `ofisy-stock.fifo`                | Configurada em `ofisy.messaging.queues.stock` (`application.yaml`)                                           |
 | DLQ              | `ofisy-stock-dlq.fifo`            | `RedrivePolicy` com `maxReceiveCount=5`                                                                      |
 | Tópico           | `ofisy-stock-events.fifo`         | Tópico deste ms, configurado em `ofisy.messaging.topics.stock`                                               |
 | Fila de inspeção | `ofisy-stock-events-inspect.fifo` | Só local. Assinada no tópico deste ms para ver o que foi publicado                                           |
-
-As assinaturas nos tópicos do billing entram junto com os handlers dos eventos de orçamento.
 
 Localmente, tudo é criado pelo `localstack/init/ready.d/01-messaging.sh`, que roda quando o LocalStack sobe (pelo `compose.yaml`, pelo `compose.db.yaml` e nos testes de integração). Com `queue-not-found-strategy: fail`, a aplicação não inicia se a fila não existir.
 
@@ -61,7 +62,38 @@ Todo evento segue o mesmo envelope (`adapters/listeners/dto/EventEnvelope.java`)
 
 | Evento                   | Produtor           | Efeito                                                                                  |
 |--------------------------|--------------------|-----------------------------------------------------------------------------------------|
+| `QuoteCreated`           | ms-ofisy-billing   | Consome os itens do orçamento e publica o `StockConsumed` ou o `StockConsumptionFailed` |
 | `AllExecutionsCancelled` | ms-ofisy-execution | Devolve ao estoque o que saiu para a OS e ainda não voltou, e publica o `StockRefunded` |
+
+#### `QuoteCreated`
+
+O billing publica quando cria um orçamento com itens de estoque. Orçamento só com serviços não passa pelo estoque. O estoque usa o `quoteId` e os `stockItems` do payload e ignora os demais campos:
+
+```json
+{
+  "eventId": "9b2f6c1e-4a7d-4e8b-a1c3-5d6e7f8a9b0c",
+  "type": "QuoteCreated",
+  "serviceOrderId": "c3d4e5f6-a7b8-9012-cdef-123456780001",
+  "occurredAt": "2026-11-02T10:00:00Z",
+  "payload": {
+    "quoteId": "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
+    "stockItems": [
+      { "stockId": "a1b2c3d4-e5f6-7890-abcd-ef1234560101", "quantity": 2 }
+    ]
+  }
+}
+```
+
+O `QuoteCreatedHandler` converte o payload e chama o `ConsumeByQuoteStockUseCase`, que, na mesma transação:
+
+1. descarta o evento se o `eventId` já estiver em `processed_events`;
+2. consome os itens pela OS (`ConsumeByServiceOrderStockUseCase`): ou todos têm saldo e todos são consumidos, ou nada é consumido;
+3. grava no outbox o `StockConsumed`, se tudo foi consumido, ou o `StockConsumptionFailed`, com os itens que faltaram;
+4. registra o `eventId` em `processed_events`.
+
+Falta de saldo, ou um item que não existe, não é erro: o evento é processado e o `StockConsumptionFailed` avisa o billing, que cancela o orçamento. Já um evento sem `serviceOrderId`, `quoteId` ou `stockItems`, ou com quantidade inválida, não tem como ser atendido: a exceção impede o ack e a mensagem vai para a DLQ depois de 5 tentativas.
+
+O consumo por OS desconta o que já saiu para ela, então um segundo `QuoteCreated` da mesma OS, com outro `eventId`, não consome os itens de novo.
 
 #### `AllExecutionsCancelled`
 
@@ -90,10 +122,52 @@ O `StockRefunded` sai mesmo quando não há nada a devolver, como numa OS sem co
 
 ### Eventos publicados
 
-| Evento          | Quando é publicado                                                    | Quem reage          |
-|-----------------|-----------------------------------------------------------------------|---------------------|
-| `StockRefunded` | Sempre que um `AllExecutionsCancelled` novo é processado              | billing e core      |
-| `StockLow`      | A cada consumo que deixa o saldo de um item igual ou abaixo do mínimo | notification        |
+| Evento                   | Quando é publicado                                                    | Quem reage          |
+|--------------------------|-----------------------------------------------------------------------|---------------------|
+| `StockConsumed`          | Depois de um `QuoteCreated` em que todos os itens foram consumidos    | billing             |
+| `StockConsumptionFailed` | Depois de um `QuoteCreated` em que algum item não tinha saldo         | billing             |
+| `StockRefunded`          | Sempre que um `AllExecutionsCancelled` novo é processado              | billing e core      |
+| `StockLow`               | A cada consumo que deixa o saldo de um item igual ou abaixo do mínimo | notification        |
+
+O billing usa só o `serviceOrderId` do envelope no `StockConsumed`, no `StockConsumptionFailed` e no `StockRefunded`. Os payloads ficam como referência para quem precisar.
+
+#### `StockConsumed`
+
+Agrupado pela OS. O payload repete o orçamento e os itens consumidos:
+
+```json
+{
+  "eventId": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
+  "type": "StockConsumed",
+  "serviceOrderId": "c3d4e5f6-a7b8-9012-cdef-123456780001",
+  "occurredAt": "2026-11-02T10:00:01Z",
+  "payload": {
+    "quoteId": "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
+    "items": [
+      { "stockId": "a1b2c3d4-e5f6-7890-abcd-ef1234560101", "quantity": 2 }
+    ]
+  }
+}
+```
+
+#### `StockConsumptionFailed`
+
+Agrupado pela OS. Nada foi consumido, e o payload lista os itens sem saldo suficiente. Um item que não existe aparece com `availableQuantity` igual a zero:
+
+```json
+{
+  "eventId": "6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c",
+  "type": "StockConsumptionFailed",
+  "serviceOrderId": "c3d4e5f6-a7b8-9012-cdef-123456780001",
+  "occurredAt": "2026-11-02T10:00:01Z",
+  "payload": {
+    "quoteId": "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
+    "missingItems": [
+      { "stockId": "a1b2c3d4-e5f6-7890-abcd-ef1234560101", "requestedQuantity": 3, "availableQuantity": 1 }
+    ]
+  }
+}
+```
 
 #### `StockLow`
 
@@ -227,10 +301,12 @@ O `TestcontainersConfiguration` sobe um LocalStack com o mesmo `01-messaging.sh`
 |---------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
 | `OutboxEventPublisherTest`            | Envelope FIFO, ordem, `published_at`, grupo dos eventos sem OS e o salto do grupo que falhou                                                      |
 | `StockEventsListenerTest`             | Despacho pelo `type`, tipo sem handler, falha do handler e `type` duplicado entre handlers                                                       |
+| `QuoteCreatedHandlerTest`             | Conversão do envelope e do payload no comando de consumo, campos extras ignorados e rejeição de evento sem OS, payload, `quoteId` ou `stockItems` |
+| `ConsumeByQuoteStockServiceTest`      | `StockConsumed` ou `StockConsumptionFailed` conforme o resultado do consumo, registro em `processed_events`, evento repetido e falha sem efeitos |
 | `AllExecutionsCancelledHandlerTest`   | Conversão do envelope no comando de devolução                                                                                                    |
 | `RefundByServiceOrderStockServiceTest`| Devolução, `StockRefunded` com e sem itens devolvidos, registro em `processed_events`, evento repetido e falha sem efeitos                       |
 | `OutboxEventPublisherIT`              | Eventos com e sem OS gravados no outbox chegam na fila de inspeção e ficam publicados                                                             |
-| `StockEventsListenerIT`               | Evento sem handler é confirmado; `AllExecutionsCancelled` repetido devolve uma vez só e grava um `StockRefunded`; OS sem consumo gera `StockRefunded` com `items` vazio; evento publicado no tópico do execution chega pela assinatura |
+| `StockEventsListenerIT`               | Evento sem handler é confirmado; `QuoteCreated` repetido consome uma vez só e grava um `StockConsumed`; `QuoteCreated` sem saldo grava o `StockConsumptionFailed` e mantém o saldo; evento publicado no tópico do billing chega pela assinatura; `AllExecutionsCancelled` repetido devolve uma vez só e grava um `StockRefunded`; OS sem consumo gera `StockRefunded` com `items` vazio; evento publicado no tópico do execution chega pela assinatura |
 
 ---
 
@@ -240,6 +316,7 @@ Com `make dev-up` e `make run`:
 
 | Comando                                                      | O que faz                                                         |
 |--------------------------------------------------------------|-------------------------------------------------------------------|
+| `make event-quote-created SERVICE_ORDER_ID=<uuid> STOCK_ID=<uuid> QUANTITY=<n>` | Publica um `QuoteCreated` com um item no tópico do billing, como o billing. Aceita `QUOTE_ID` |
 | `make event-all-executions-cancelled SERVICE_ORDER_ID=<uuid>` | Publica um `AllExecutionsCancelled` no tópico de execução, como o execution |
 | `make db-movements SERVICE_ORDER_ID=<uuid>`                  | Lista as movimentações de uma OS                                  |
 | `make events-peek`         | Lista os eventos publicados no tópico, pela fila de inspeção      |

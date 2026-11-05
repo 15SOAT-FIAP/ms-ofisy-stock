@@ -36,6 +36,7 @@ import static org.awaitility.Awaitility.await;
 class StockEventsListenerIT {
 
     private static final String EXECUTION_TOPIC_NAME = "ofisy-execution-events.fifo";
+    private static final String BILLING_TOPIC_NAME = "ofisy-billing-events.fifo";
 
     @Autowired
     private SqsAsyncClient sqsAsyncClient;
@@ -80,6 +81,82 @@ class StockEventsListenerIT {
 
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(pendingMessages(queueUrl)).isZero());
         assertThat(processedEventRepository.existsById(eventId)).isFalse();
+    }
+
+    @Nested
+    class QuoteCreated {
+
+        @Test
+        void shouldConsumeItemsOnceAndPublishStockConsumedWhenEventIsDeliveredTwice() {
+            UUID eventId = UUID.randomUUID();
+            UUID serviceOrderId = UUID.randomUUID();
+            UUID quoteId = UUID.randomUUID();
+            UUID stockId = newStock(10);
+            String queueUrl = queueUrl();
+
+            // Dedup ids diferentes simulam uma reentrega fora da janela de deduplicação do FIFO
+            send(queueUrl, serviceOrderId, quoteCreatedBody(eventId, serviceOrderId, quoteId, stockId, 4));
+            send(queueUrl, serviceOrderId, quoteCreatedBody(eventId, serviceOrderId, quoteId, stockId, 4));
+
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+                assertThat(pendingMessages(queueUrl)).isZero();
+                assertThat(processedEventRepository.existsById(eventId)).isTrue();
+            });
+            assertThat(quantityOf(stockId)).isEqualTo(6);
+
+            List<OutboxEventEntity> events = outboxEventsOf(serviceOrderId);
+            assertThat(events).hasSize(1);
+            assertThat(events.getFirst().getEventType()).isEqualTo("StockConsumed");
+            JsonNode payload = jsonMapper.readTree(events.getFirst().getPayload());
+            assertThat(payload.get("quoteId").asString()).isEqualTo(quoteId.toString());
+            assertThat(payload.get("items")).hasSize(1);
+            assertThat(payload.get("items").get(0).get("stockId").asString()).isEqualTo(stockId.toString());
+            assertThat(payload.get("items").get(0).get("quantity").asInt()).isEqualTo(4);
+        }
+
+        @Test
+        void shouldPublishStockConsumptionFailedAndKeepBalanceWhenItemIsMissing() {
+            UUID eventId = UUID.randomUUID();
+            UUID serviceOrderId = UUID.randomUUID();
+            UUID quoteId = UUID.randomUUID();
+            UUID stockId = newStock(2);
+            String queueUrl = queueUrl();
+
+            send(queueUrl, serviceOrderId, quoteCreatedBody(eventId, serviceOrderId, quoteId, stockId, 3));
+
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+                assertThat(pendingMessages(queueUrl)).isZero();
+                assertThat(processedEventRepository.existsById(eventId)).isTrue();
+            });
+            assertThat(quantityOf(stockId)).isEqualTo(2);
+
+            List<OutboxEventEntity> events = outboxEventsOf(serviceOrderId);
+            assertThat(events).hasSize(1);
+            assertThat(events.getFirst().getEventType()).isEqualTo("StockConsumptionFailed");
+            JsonNode payload = jsonMapper.readTree(events.getFirst().getPayload());
+            assertThat(payload.get("quoteId").asString()).isEqualTo(quoteId.toString());
+            JsonNode missing = payload.get("missingItems").get(0);
+            assertThat(missing.get("stockId").asString()).isEqualTo(stockId.toString());
+            assertThat(missing.get("requestedQuantity").asInt()).isEqualTo(3);
+            assertThat(missing.get("availableQuantity").asInt()).isEqualTo(2);
+        }
+
+        @Test
+        void shouldReceiveEventPublishedOnBillingTopic() {
+            UUID eventId = UUID.randomUUID();
+            UUID serviceOrderId = UUID.randomUUID();
+            UUID stockId = newStock(10);
+
+            snsClient.publish(r -> r
+                    .topicArn(topicArn(BILLING_TOPIC_NAME))
+                    .messageGroupId(serviceOrderId.toString())
+                    .messageDeduplicationId(UUID.randomUUID().toString())
+                    .message(quoteCreatedBody(eventId, serviceOrderId, UUID.randomUUID(), stockId, 3)));
+
+            await().atMost(Duration.ofSeconds(30))
+                    .untilAsserted(() -> assertThat(processedEventRepository.existsById(eventId)).isTrue());
+            assertThat(quantityOf(stockId)).isEqualTo(7);
+        }
     }
 
     @Nested
@@ -138,14 +215,8 @@ class StockEventsListenerIT {
             UUID stockId = newStock(10);
             consumeByServiceOrderStockUseCase.execute(
                     new ConsumeByServiceOrderStockCommand(serviceOrderId, List.of(new StockItem(stockId, 3))));
-            String topicArn = snsClient.listTopics().topics().stream()
-                    .filter(topic -> topic.topicArn().endsWith(":" + EXECUTION_TOPIC_NAME))
-                    .findFirst()
-                    .orElseThrow()
-                    .topicArn();
-
             snsClient.publish(r -> r
-                    .topicArn(topicArn)
+                    .topicArn(topicArn(EXECUTION_TOPIC_NAME))
                     .messageGroupId(serviceOrderId.toString())
                     .messageDeduplicationId(UUID.randomUUID().toString())
                     .message(allExecutionsCancelledBody(eventId, serviceOrderId)));
@@ -169,6 +240,29 @@ class StockEventsListenerIT {
         return outboxEventRepository.findAll().stream()
                 .filter(event -> serviceOrderId.equals(event.getServiceOrderId()))
                 .toList();
+    }
+
+    private String topicArn(String topicName) {
+        return snsClient.listTopics().topics().stream()
+                .filter(topic -> topic.topicArn().endsWith(":" + topicName))
+                .findFirst()
+                .orElseThrow()
+                .topicArn();
+    }
+
+    private String quoteCreatedBody(UUID eventId, UUID serviceOrderId, UUID quoteId, UUID stockId, int quantity) {
+        return """
+                {
+                  "eventId": "%s",
+                  "type": "QuoteCreated",
+                  "serviceOrderId": "%s",
+                  "occurredAt": "2026-11-02T10:00:00Z",
+                  "payload": {
+                    "quoteId": "%s",
+                    "stockItems": [ { "stockId": "%s", "quantity": %d } ]
+                  }
+                }
+                """.formatted(eventId, serviceOrderId, quoteId, stockId, quantity);
     }
 
     private String allExecutionsCancelledBody(UUID eventId, UUID serviceOrderId) {
