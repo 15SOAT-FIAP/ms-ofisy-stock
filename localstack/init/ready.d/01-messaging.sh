@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Fila de entrada do estoque. As assinaturas nos tópicos dos outros serviços entram junto com o primeiro handler de cada evento
+# Fila de entrada do estoque, com a DLQ
 
 DLQ_URL=$(awslocal sqs create-queue \
   --queue-name ofisy-stock-dlq.fifo \
@@ -13,9 +13,28 @@ DLQ_ARN=$(awslocal sqs get-queue-attributes \
   --attribute-names QueueArn \
   --query Attributes.QueueArn --output text)
 
-awslocal sqs create-queue \
+QUEUE_URL=$(awslocal sqs create-queue \
   --queue-name ofisy-stock.fifo \
-  --attributes "{\"FifoQueue\":\"true\",\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"5\\\"}\"}"
+  --attributes "{\"FifoQueue\":\"true\",\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"5\\\"}\"}" \
+  --query QueueUrl --output text)
+
+QUEUE_ARN=$(awslocal sqs get-queue-attributes \
+  --queue-url "$QUEUE_URL" \
+  --attribute-names QueueArn \
+  --query Attributes.QueueArn --output text)
+
+# Na AWS o tópico de eventos de execução pertence ao ms-ofisy-execution; aqui ele é criado só para exercitar o fluxo localmente
+
+EXECUTION_TOPIC_ARN=$(awslocal sns create-topic \
+  --name ofisy-execution-events.fifo \
+  --attributes FifoTopic=true \
+  --query TopicArn --output text)
+
+awslocal sns subscribe \
+  --topic-arn "$EXECUTION_TOPIC_ARN" \
+  --protocol sqs \
+  --notification-endpoint "$QUEUE_ARN" \
+  --attributes '{"RawMessageDelivery":"true","FilterPolicyScope":"MessageBody","FilterPolicy":"{\"type\":[\"AllExecutionsCancelled\"]}"}'
 
 # Tópico de eventos publicados por este ms. A fila de inspeção existe só localmente, para ver o que foi publicado
 

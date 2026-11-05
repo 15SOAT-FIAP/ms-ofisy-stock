@@ -35,7 +35,7 @@ class StockEventsListenerTest {
     @BeforeEach
     void setUp() {
         lenient().when(quoteCreatedHandler.type()).thenReturn("QuoteCreated");
-        lenient().when(otherHandler.type()).thenReturn("ServiceOrderCancelled");
+        lenient().when(otherHandler.type()).thenReturn("AllExecutionsCancelled");
         listener = new StockEventsListener(List.of(quoteCreatedHandler, otherHandler));
     }
 

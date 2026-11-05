@@ -1,6 +1,7 @@
 .PHONY: help dev-up dev-down run test verify token \
+	event-all-executions-cancelled \
 	queue-status dlq-peek dlq-redrive dlq-purge events-peek \
-	db-processed-events db-outbox
+	db-movements db-processed-events db-outbox
 
 LOCALSTACK_CONTAINER ?= ms-ofisy-stock-local-localstack
 DB_CONTAINER ?= ms-ofisy-stock-local-db
@@ -37,6 +38,11 @@ verify: ## Roda testes unitários, de integração e o gate de cobertura
 token: ## Gera um JWT local no formato do core (ROLE obrigatório: ADMIN, ATTENDANT, MECHANIC ou STOCKMAN)
 	@ROLE=$(ROLE) EMAIL=$(EMAIL) scripts/generate-token.sh
 
+event-all-executions-cancelled: ## Publica um AllExecutionsCancelled no tópico de execução (SERVICE_ORDER_ID obrigatório, EVENT_ID opcional)
+	@test -n "$(SERVICE_ORDER_ID)" || (echo "Informe SERVICE_ORDER_ID=<uuid>" && exit 1)
+	@LOCALSTACK_CONTAINER=$(LOCALSTACK_CONTAINER) EVENT_ID=$(EVENT_ID) SERVICE_ORDER_ID=$(SERVICE_ORDER_ID) \
+	TOPIC=ofisy-execution-events.fifo TYPE=AllExecutionsCancelled scripts/publish-event.sh
+
 queue-status: ## Mostra quantas mensagens há na fila e na DLQ
 	@for q in $(QUEUE_NAME) $(DLQ_NAME); do \
 		url=$$($(AWS) sqs get-queue-url --queue-name $$q --query QueueUrl --output text); \
@@ -64,6 +70,10 @@ events-peek: ## Lista os eventos publicados no tópico do ms, pela fila de inspe
 	@$(AWS) sqs receive-message --queue-url $(call queue_url,$(INSPECT_QUEUE_NAME)) \
 		--max-number-of-messages 10 --visibility-timeout 0 \
 		--query 'Messages[].Body' --output json
+
+db-movements: ## Lista as movimentações de uma OS (SERVICE_ORDER_ID obrigatório)
+	@test -n "$(SERVICE_ORDER_ID)" || (echo "Informe SERVICE_ORDER_ID=<uuid>" && exit 1)
+	@$(psql) "select stock_id, movement_type, quantity, previous_quantity, new_quantity, created_at from stock_movements where service_order_id = '$(SERVICE_ORDER_ID)' order by created_at;"
 
 db-processed-events: ## Lista os últimos eventos processados
 	@$(psql) "select * from processed_events order by processed_at desc limit 10;"
