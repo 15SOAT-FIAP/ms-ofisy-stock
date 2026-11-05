@@ -160,6 +160,83 @@ class StockEventsListenerIT {
     }
 
     @Nested
+    class QuoteReproved {
+
+        @Test
+        void shouldRefundConsumedItemsAndPublishStockRefunded() {
+            UUID eventId = UUID.randomUUID();
+            UUID serviceOrderId = UUID.randomUUID();
+            UUID stockId = newStock(10);
+            consumeByServiceOrderStockUseCase.execute(
+                    new ConsumeByServiceOrderStockCommand(serviceOrderId, List.of(new StockItem(stockId, 4))));
+            String queueUrl = queueUrl();
+
+            send(queueUrl, serviceOrderId, quoteReprovedBody(eventId, serviceOrderId));
+
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+                assertThat(pendingMessages(queueUrl)).isZero();
+                assertThat(processedEventRepository.existsById(eventId)).isTrue();
+            });
+            assertThat(quantityOf(stockId)).isEqualTo(10);
+
+            List<OutboxEventEntity> refunds = outboxEventsOf(serviceOrderId);
+            assertThat(refunds).hasSize(1);
+            assertThat(refunds.getFirst().getEventType()).isEqualTo("StockRefunded");
+            JsonNode items = jsonMapper.readTree(refunds.getFirst().getPayload()).get("items");
+            assertThat(items).hasSize(1);
+            assertThat(items.get(0).get("stockId").asString()).isEqualTo(stockId.toString());
+            assertThat(items.get(0).get("quantity").asInt()).isEqualTo(4);
+        }
+
+        @Test
+        void shouldNotRefundAgainWhenServiceOrderIsCancelledAfterReproval() {
+            UUID reprovedEventId = UUID.randomUUID();
+            UUID cancelledEventId = UUID.randomUUID();
+            UUID serviceOrderId = UUID.randomUUID();
+            UUID stockId = newStock(10);
+            consumeByServiceOrderStockUseCase.execute(
+                    new ConsumeByServiceOrderStockCommand(serviceOrderId, List.of(new StockItem(stockId, 4))));
+            String queueUrl = queueUrl();
+
+            send(queueUrl, serviceOrderId, quoteReprovedBody(reprovedEventId, serviceOrderId));
+            send(queueUrl, serviceOrderId, allExecutionsCancelledBody(cancelledEventId, serviceOrderId));
+
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+                assertThat(pendingMessages(queueUrl)).isZero();
+                assertThat(processedEventRepository.existsById(reprovedEventId)).isTrue();
+                assertThat(processedEventRepository.existsById(cancelledEventId)).isTrue();
+            });
+            assertThat(quantityOf(stockId)).isEqualTo(10);
+
+            // O segundo StockRefunded sai vazio: os itens já tinham voltado na reprovação
+            List<Integer> refundedItems = outboxEventsOf(serviceOrderId).stream()
+                    .filter(event -> "StockRefunded".equals(event.getEventType()))
+                    .map(event -> jsonMapper.readTree(event.getPayload()).get("items").size())
+                    .toList();
+            assertThat(refundedItems).containsExactlyInAnyOrder(1, 0);
+        }
+
+        @Test
+        void shouldReceiveEventPublishedOnBillingTopic() {
+            UUID eventId = UUID.randomUUID();
+            UUID serviceOrderId = UUID.randomUUID();
+            UUID stockId = newStock(10);
+            consumeByServiceOrderStockUseCase.execute(
+                    new ConsumeByServiceOrderStockCommand(serviceOrderId, List.of(new StockItem(stockId, 3))));
+
+            snsClient.publish(r -> r
+                    .topicArn(topicArn(BILLING_TOPIC_NAME))
+                    .messageGroupId(serviceOrderId.toString())
+                    .messageDeduplicationId(UUID.randomUUID().toString())
+                    .message(quoteReprovedBody(eventId, serviceOrderId)));
+
+            await().atMost(Duration.ofSeconds(30))
+                    .untilAsserted(() -> assertThat(processedEventRepository.existsById(eventId)).isTrue());
+            assertThat(quantityOf(stockId)).isEqualTo(10);
+        }
+    }
+
+    @Nested
     class AllExecutionsCancelled {
 
         @Test
@@ -263,6 +340,22 @@ class StockEventsListenerIT {
                   }
                 }
                 """.formatted(eventId, serviceOrderId, quoteId, stockId, quantity);
+    }
+
+    private String quoteReprovedBody(UUID eventId, UUID serviceOrderId) {
+        return """
+                {
+                  "eventId": "%s",
+                  "type": "QuoteReproved",
+                  "serviceOrderId": "%s",
+                  "occurredAt": "2026-11-02T11:00:00Z",
+                  "payload": {
+                    "quoteId": "%s",
+                    "reason": "Valor acima do esperado",
+                    "stockItems": []
+                  }
+                }
+                """.formatted(eventId, serviceOrderId, UUID.randomUUID());
     }
 
     private String allExecutionsCancelledBody(UUID eventId, UUID serviceOrderId) {
