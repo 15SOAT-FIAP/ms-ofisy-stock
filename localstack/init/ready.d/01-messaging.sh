@@ -47,7 +47,7 @@ awslocal sns subscribe \
   --topic-arn "$BILLING_TOPIC_ARN" \
   --protocol sqs \
   --notification-endpoint "$QUEUE_ARN" \
-  --attributes '{"RawMessageDelivery":"true","FilterPolicyScope":"MessageBody","FilterPolicy":"{\"type\":[\"QuoteCreated\"]}"}'
+  --attributes '{"RawMessageDelivery":"true","FilterPolicyScope":"MessageBody","FilterPolicy":"{\"type\":[\"QuoteCreated\",\"QuoteReproved\"]}"}'
 
 # Tópico de eventos publicados por este ms. A fila de inspeção existe só localmente, para ver o que foi publicado
 

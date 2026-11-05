@@ -1,5 +1,5 @@
 .PHONY: help dev-up dev-down run test verify token \
-	event-all-executions-cancelled event-quote-created \
+	event-all-executions-cancelled event-quote-created event-quote-reproved \
 	queue-status dlq-peek dlq-redrive dlq-purge events-peek \
 	db-movements db-processed-events db-outbox
 
@@ -52,6 +52,12 @@ event-quote-created: ## Publica um QuoteCreated com um item no tópico do billin
 	@LOCALSTACK_CONTAINER=$(LOCALSTACK_CONTAINER) EVENT_ID=$(EVENT_ID) SERVICE_ORDER_ID=$(SERVICE_ORDER_ID) \
 	PAYLOAD='{"quoteId":"$(QUOTE_ID)","stockItems":[{"stockId":"$(STOCK_ID)","quantity":$(QUANTITY)}]}' \
 	TOPIC=ofisy-billing-events.fifo TYPE=QuoteCreated scripts/publish-event.sh
+
+event-quote-reproved: ## Publica um QuoteReproved no tópico do billing (SERVICE_ORDER_ID obrigatório, QUOTE_ID e EVENT_ID opcionais)
+	@test -n "$(SERVICE_ORDER_ID)" || (echo "Informe SERVICE_ORDER_ID=<uuid>" && exit 1)
+	@LOCALSTACK_CONTAINER=$(LOCALSTACK_CONTAINER) EVENT_ID=$(EVENT_ID) SERVICE_ORDER_ID=$(SERVICE_ORDER_ID) \
+	PAYLOAD='{"quoteId":"$(QUOTE_ID)","reason":"Teste local"}' \
+	TOPIC=ofisy-billing-events.fifo TYPE=QuoteReproved scripts/publish-event.sh
 
 queue-status: ## Mostra quantas mensagens há na fila e na DLQ
 	@for q in $(QUEUE_NAME) $(DLQ_NAME); do \
