@@ -1,5 +1,5 @@
 .PHONY: help dev-up dev-down run test verify token \
-	event-service-order-cancelled \
+	event-all-executions-cancelled \
 	queue-status dlq-peek dlq-redrive dlq-purge events-peek \
 	db-movements db-processed-events db-outbox
 
@@ -38,10 +38,10 @@ verify: ## Roda testes unitários, de integração e o gate de cobertura
 token: ## Gera um JWT local no formato do core (ROLE obrigatório: ADMIN, ATTENDANT, MECHANIC ou STOCKMAN)
 	@ROLE=$(ROLE) EMAIL=$(EMAIL) scripts/generate-token.sh
 
-event-service-order-cancelled: ## Publica um ServiceOrderCancelled no tópico de OS (SERVICE_ORDER_ID obrigatório, EVENT_ID opcional)
+event-all-executions-cancelled: ## Publica um AllExecutionsCancelled no tópico de execução (SERVICE_ORDER_ID obrigatório, EVENT_ID opcional)
 	@test -n "$(SERVICE_ORDER_ID)" || (echo "Informe SERVICE_ORDER_ID=<uuid>" && exit 1)
 	@LOCALSTACK_CONTAINER=$(LOCALSTACK_CONTAINER) EVENT_ID=$(EVENT_ID) SERVICE_ORDER_ID=$(SERVICE_ORDER_ID) \
-	TOPIC=ofisy-service-order-events.fifo TYPE=ServiceOrderCancelled scripts/publish-event.sh
+	TOPIC=ofisy-execution-events.fifo TYPE=AllExecutionsCancelled scripts/publish-event.sh
 
 queue-status: ## Mostra quantas mensagens há na fila e na DLQ
 	@for q in $(QUEUE_NAME) $(DLQ_NAME); do \
