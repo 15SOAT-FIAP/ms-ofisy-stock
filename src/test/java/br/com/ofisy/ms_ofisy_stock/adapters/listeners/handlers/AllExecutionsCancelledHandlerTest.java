@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class ServiceOrderCancelledHandlerTest {
+class AllExecutionsCancelledHandlerTest {
 
     private static final UUID EVENT_ID = UUID.randomUUID();
     private static final UUID SERVICE_ORDER_ID = UUID.randomUUID();
@@ -27,11 +27,11 @@ class ServiceOrderCancelledHandlerTest {
     private RefundByServiceOrderStockUseCase refundByServiceOrderStockUseCase;
 
     @InjectMocks
-    private ServiceOrderCancelledHandler handler;
+    private AllExecutionsCancelledHandler handler;
 
     @Test
-    void shouldHandleServiceOrderCancelledType() {
-        assertThat(handler.type()).isEqualTo("ServiceOrderCancelled");
+    void shouldHandleAllExecutionsCancelledType() {
+        assertThat(handler.type()).isEqualTo("AllExecutionsCancelled");
     }
 
     @Nested
@@ -39,13 +39,13 @@ class ServiceOrderCancelledHandlerTest {
 
         @Test
         void shouldMapEnvelopeToRefundCommand() {
-            EventEnvelope envelope = new EventEnvelope(EVENT_ID, ServiceOrderCancelledHandler.TYPE, SERVICE_ORDER_ID,
+            EventEnvelope envelope = new EventEnvelope(EVENT_ID, AllExecutionsCancelledHandler.TYPE, SERVICE_ORDER_ID,
                     Instant.parse("2026-10-20T10:00:00Z"), JsonMapper.builder().build().readTree("{}"));
 
             handler.handle(envelope);
 
             verify(refundByServiceOrderStockUseCase).execute(
-                    new RefundByServiceOrderStockCommand(EVENT_ID, ServiceOrderCancelledHandler.TYPE, SERVICE_ORDER_ID));
+                    new RefundByServiceOrderStockCommand(EVENT_ID, AllExecutionsCancelledHandler.TYPE, SERVICE_ORDER_ID));
         }
     }
 }

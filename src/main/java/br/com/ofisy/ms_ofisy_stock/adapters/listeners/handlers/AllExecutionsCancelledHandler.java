@@ -11,9 +11,9 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class ServiceOrderCancelledHandler implements EventHandler {
+public class AllExecutionsCancelledHandler implements EventHandler {
 
-    public static final String TYPE = "ServiceOrderCancelled";
+    public static final String TYPE = "AllExecutionsCancelled";
 
     private final RefundByServiceOrderStockUseCase refundByServiceOrderStockUseCase;
 
@@ -26,7 +26,7 @@ public class ServiceOrderCancelledHandler implements EventHandler {
     public void handle(EventEnvelope envelope) {
         refundByServiceOrderStockUseCase.execute(
                 new RefundByServiceOrderStockCommand(envelope.eventId(), envelope.type(), envelope.serviceOrderId()));
-        log.info("ServiceOrderCancelledHandler.handle >> event {} processed, stock of service order {} refunded",
+        log.info("AllExecutionsCancelledHandler.handle >> event {} processed, stock of service order {} refunded",
                 envelope.eventId(), envelope.serviceOrderId());
     }
 }

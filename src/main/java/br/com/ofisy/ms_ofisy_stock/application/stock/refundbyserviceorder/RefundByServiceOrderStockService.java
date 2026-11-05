@@ -24,7 +24,8 @@ public class RefundByServiceOrderStockService implements RefundByServiceOrderSto
     private final ProcessedEventRepository processedEventRepository;
     private final OutboxEventRepository outboxEventRepository;
 
-    // O StockRefunded só sai quando algo voltou ao estoque: uma OS sem consumo, ou já devolvida, não gera evento
+    // O StockRefunded sai sempre, mesmo sem nada a devolver (OS sem consumo ou já devolvida), porque o
+    // billing e o core seguem a saga a partir dele. Nesse caso a lista de itens vai vazia
     @Override
     public void execute(RefundByServiceOrderStockCommand cmd) {
         if (processedEventRepository.existsById(cmd.eventId())) {
@@ -33,10 +34,8 @@ public class RefundByServiceOrderStockService implements RefundByServiceOrderSto
 
         List<ReleasedStockItem> releasedItems = releaseByServiceOrderStockUseCase.execute(
                 new ReleaseByServiceOrderStockCommand(cmd.serviceOrderId()));
-        if (!releasedItems.isEmpty()) {
-            outboxEventRepository.save(OutboxEvent.create(STOCK_REFUNDED, cmd.serviceOrderId(),
-                    new StockRefundedPayload(releasedItems)));
-        }
+        outboxEventRepository.save(OutboxEvent.create(STOCK_REFUNDED, cmd.serviceOrderId(),
+                new StockRefundedPayload(releasedItems)));
 
         processedEventRepository.save(ProcessedEvent.create(cmd.eventId(), cmd.eventType()));
     }

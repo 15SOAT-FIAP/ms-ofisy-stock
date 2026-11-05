@@ -35,7 +35,7 @@ import static org.awaitility.Awaitility.await;
 @SpringBootTest(properties = "jwt.secret=" + JwtTestTokens.SECRET)
 class StockEventsListenerIT {
 
-    private static final String SERVICE_ORDER_TOPIC_NAME = "ofisy-service-order-events.fifo";
+    private static final String EXECUTION_TOPIC_NAME = "ofisy-execution-events.fifo";
 
     @Autowired
     private SqsAsyncClient sqsAsyncClient;
@@ -83,7 +83,7 @@ class StockEventsListenerIT {
     }
 
     @Nested
-    class ServiceOrderCancelled {
+    class AllExecutionsCancelled {
 
         @Test
         void shouldRefundConsumedItemsOnceWhenEventIsDeliveredTwice() {
@@ -95,8 +95,8 @@ class StockEventsListenerIT {
             String queueUrl = queueUrl();
 
             // Dedup ids diferentes simulam uma reentrega fora da janela de deduplicação do FIFO
-            send(queueUrl, serviceOrderId, serviceOrderCancelledBody(eventId, serviceOrderId));
-            send(queueUrl, serviceOrderId, serviceOrderCancelledBody(eventId, serviceOrderId));
+            send(queueUrl, serviceOrderId, allExecutionsCancelledBody(eventId, serviceOrderId));
+            send(queueUrl, serviceOrderId, allExecutionsCancelledBody(eventId, serviceOrderId));
 
             await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
                 assertThat(pendingMessages(queueUrl)).isZero();
@@ -114,29 +114,32 @@ class StockEventsListenerIT {
         }
 
         @Test
-        void shouldNotPublishStockRefundedWhenServiceOrderHasNothingToRefund() {
+        void shouldPublishStockRefundedWithEmptyItemsWhenServiceOrderHasNothingToRefund() {
             UUID eventId = UUID.randomUUID();
             UUID serviceOrderId = UUID.randomUUID();
             String queueUrl = queueUrl();
 
-            send(queueUrl, serviceOrderId, serviceOrderCancelledBody(eventId, serviceOrderId));
+            send(queueUrl, serviceOrderId, allExecutionsCancelledBody(eventId, serviceOrderId));
 
             await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
                 assertThat(pendingMessages(queueUrl)).isZero();
                 assertThat(processedEventRepository.existsById(eventId)).isTrue();
             });
-            assertThat(outboxEventsOf(serviceOrderId)).isEmpty();
+            List<OutboxEventEntity> refunds = outboxEventsOf(serviceOrderId);
+            assertThat(refunds).hasSize(1);
+            assertThat(refunds.getFirst().getEventType()).isEqualTo("StockRefunded");
+            assertThat(jsonMapper.readTree(refunds.getFirst().getPayload()).get("items")).isEmpty();
         }
 
         @Test
-        void shouldReceiveEventPublishedOnServiceOrderTopic() {
+        void shouldReceiveEventPublishedOnExecutionTopic() {
             UUID eventId = UUID.randomUUID();
             UUID serviceOrderId = UUID.randomUUID();
             UUID stockId = newStock(10);
             consumeByServiceOrderStockUseCase.execute(
                     new ConsumeByServiceOrderStockCommand(serviceOrderId, List.of(new StockItem(stockId, 3))));
             String topicArn = snsClient.listTopics().topics().stream()
-                    .filter(topic -> topic.topicArn().endsWith(":" + SERVICE_ORDER_TOPIC_NAME))
+                    .filter(topic -> topic.topicArn().endsWith(":" + EXECUTION_TOPIC_NAME))
                     .findFirst()
                     .orElseThrow()
                     .topicArn();
@@ -145,7 +148,7 @@ class StockEventsListenerIT {
                     .topicArn(topicArn)
                     .messageGroupId(serviceOrderId.toString())
                     .messageDeduplicationId(UUID.randomUUID().toString())
-                    .message(serviceOrderCancelledBody(eventId, serviceOrderId)));
+                    .message(allExecutionsCancelledBody(eventId, serviceOrderId)));
 
             await().atMost(Duration.ofSeconds(30))
                     .untilAsserted(() -> assertThat(processedEventRepository.existsById(eventId)).isTrue());
@@ -168,11 +171,11 @@ class StockEventsListenerIT {
                 .toList();
     }
 
-    private String serviceOrderCancelledBody(UUID eventId, UUID serviceOrderId) {
+    private String allExecutionsCancelledBody(UUID eventId, UUID serviceOrderId) {
         return """
                 {
                   "eventId": "%s",
-                  "type": "ServiceOrderCancelled",
+                  "type": "AllExecutionsCancelled",
                   "serviceOrderId": "%s",
                   "occurredAt": "2026-10-20T10:00:00Z",
                   "payload": {}

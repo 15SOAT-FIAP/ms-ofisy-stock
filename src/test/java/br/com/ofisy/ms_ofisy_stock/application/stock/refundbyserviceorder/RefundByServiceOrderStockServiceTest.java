@@ -36,7 +36,7 @@ class RefundByServiceOrderStockServiceTest {
     private static final UUID SERVICE_ORDER_ID = UUID.randomUUID();
     private static final UUID STOCK_ID = UUID.randomUUID();
     private static final RefundByServiceOrderStockCommand COMMAND =
-            new RefundByServiceOrderStockCommand(EVENT_ID, "ServiceOrderCancelled", SERVICE_ORDER_ID);
+            new RefundByServiceOrderStockCommand(EVENT_ID, "AllExecutionsCancelled", SERVICE_ORDER_ID);
     private static final ReleaseByServiceOrderStockCommand RELEASE_COMMAND =
             new ReleaseByServiceOrderStockCommand(SERVICE_ORDER_ID);
 
@@ -86,12 +86,14 @@ class RefundByServiceOrderStockServiceTest {
         }
 
         @Test
-        void shouldNotRecordStockRefundedWhenNothingWasReleased() {
+        void shouldRecordStockRefundedWithEmptyItemsWhenNothingWasReleased() {
             when(releaseByServiceOrderStockUseCase.execute(RELEASE_COMMAND)).thenReturn(List.of());
 
             refundService.execute(COMMAND);
 
-            verifyNoInteractions(outboxEventRepository);
+            verify(outboxEventRepository).save(outboxEventCaptor.capture());
+            assertThat(outboxEventCaptor.getValue().getEventType()).isEqualTo(RefundByServiceOrderStockService.STOCK_REFUNDED);
+            assertThat(outboxEventCaptor.getValue().getPayload()).isEqualTo(new StockRefundedPayload(List.of()));
         }
 
         @Test
@@ -102,7 +104,7 @@ class RefundByServiceOrderStockServiceTest {
 
             verify(processedEventRepository).save(processedEventCaptor.capture());
             assertThat(processedEventCaptor.getValue().getEventId()).isEqualTo(EVENT_ID);
-            assertThat(processedEventCaptor.getValue().getEventType()).isEqualTo("ServiceOrderCancelled");
+            assertThat(processedEventCaptor.getValue().getEventType()).isEqualTo("AllExecutionsCancelled");
         }
 
         @Test
