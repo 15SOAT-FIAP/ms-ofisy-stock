@@ -4,7 +4,7 @@ FIAP 15SOAT - Tech Challenge - Grupo 81
 
 Microsserviço responsável pelo **estoque de peças e insumos** da Ofisy. Ele mantém o cadastro dos itens, o saldo de cada um e o histórico de movimentações de entrada e saída, e expõe uma API REST para consulta e manutenção do estoque.
 
-Na saga do orçamento, o estoque consome os itens de uma ordem de serviço quando o orçamento é criado e os devolve quando o orçamento é reprovado ou a OS é cancelada. Tudo isso acontece por eventos: o estoque consome o `QuoteCreated`, o `QuoteReproved` e o `AllExecutionsCancelled`, e responde com o `StockConsumed`, o `StockConsumptionFailed` e o `StockRefunded`. Também avisa quando um item chega ao estoque mínimo, com o `StockLow` ([MESSAGING.md](docs/MESSAGING.md)).
+Na saga do orçamento, o estoque consome os itens de uma ordem de serviço quando o orçamento é criado, ajusta a diferença quando ele é editado e os devolve quando o orçamento é reprovado ou a OS é cancelada. Tudo isso acontece por eventos: o estoque consome o `QuoteCreated`, o `QuoteUpdated`, o `QuoteReproved` e o `AllExecutionsCancelled`, e responde com o `StockConsumed`, o `StockConsumptionFailed` e o `StockRefunded`. Também avisa quando um item chega ao estoque mínimo, com o `StockLow` ([MESSAGING.md](docs/MESSAGING.md)).
 
 O contexto de estoque foi extraído do core da Ofisy ([techchallenge-ofisy](https://github.com/15SOAT-FIAP/techchallenge-ofisy)), que continua existindo enquanto alguns contextos são estrangulados para microsserviços. Este ms participa da saga coordenada por coreografia, e as decisões por trás dessa arquitetura estão registradas nos ADRs do core:
 
