@@ -5,9 +5,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 import java.util.UUID;
 
-// Só os campos que o estoque usa. Os demais que o billing venha a enviar são ignorados
+// Payload dos eventos do orçamento que levam a lista de itens de estoque. Só os campos que o estoque usa. Os demais que o billing venha a enviar são ignorados
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record QuoteCreatedPayload(
+public record QuoteStockItemsPayload(
         UUID quoteId,
         List<StockItemPayload> stockItems
 ) {
