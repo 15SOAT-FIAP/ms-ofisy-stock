@@ -1,5 +1,5 @@
 .PHONY: help dev-up dev-down run test verify token \
-	event-all-executions-cancelled event-quote-created event-quote-reproved \
+	event-all-executions-cancelled event-quote-created event-quote-updated event-quote-reproved \
 	queue-status dlq-peek dlq-redrive dlq-purge events-peek \
 	db-movements db-processed-events db-outbox
 
@@ -14,6 +14,8 @@ INSPECT_QUEUE_NAME := ofisy-stock-events-inspect.fifo
 QUOTE_ID ?= $(shell od -An -N16 -tx1 /dev/urandom | tr -d ' \n' | sed -E 's/(.{8})(.{4})(.{4})(.{4})(.{12})/\1-\2-\3-\4-\5/')
 QUEUE_ARN := arn:aws:sqs:us-east-1:000000000000:$(QUEUE_NAME)
 DLQ_ARN := arn:aws:sqs:us-east-1:000000000000:$(DLQ_NAME)
+# Vírgula literal dentro do $(if ...), onde ela separaria os argumentos
+COMMA := ,
 
 queue_url = $$($(AWS) sqs get-queue-url --queue-name $(1) --query QueueUrl --output text)
 psql = set -a && . ./.env && set +a && \
@@ -52,6 +54,13 @@ event-quote-created: ## Publica um QuoteCreated com um item no tópico do billin
 	@LOCALSTACK_CONTAINER=$(LOCALSTACK_CONTAINER) EVENT_ID=$(EVENT_ID) SERVICE_ORDER_ID=$(SERVICE_ORDER_ID) \
 	PAYLOAD='{"quoteId":"$(QUOTE_ID)","stockItems":[{"stockId":"$(STOCK_ID)","quantity":$(QUANTITY)}]}' \
 	TOPIC=ofisy-billing-events.fifo TYPE=QuoteCreated scripts/publish-event.sh
+
+event-quote-updated: ## Publica um QuoteUpdated no tópico do billing com a lista final de itens (SERVICE_ORDER_ID obrigatório; STOCK_ID e QUANTITY para um item, sem eles a lista vai vazia; QUOTE_ID e EVENT_ID opcionais)
+	@test -n "$(SERVICE_ORDER_ID)" || (echo "Informe SERVICE_ORDER_ID=<uuid>" && exit 1)
+	@test -z "$(STOCK_ID)" || test -n "$(QUANTITY)" || (echo "Informe QUANTITY=<quantidade> junto com o STOCK_ID" && exit 1)
+	@LOCALSTACK_CONTAINER=$(LOCALSTACK_CONTAINER) EVENT_ID=$(EVENT_ID) SERVICE_ORDER_ID=$(SERVICE_ORDER_ID) \
+	PAYLOAD='{"quoteId":"$(QUOTE_ID)","stockItems":[$(if $(STOCK_ID),{"stockId":"$(STOCK_ID)"$(COMMA)"quantity":$(QUANTITY)})]}' \
+	TOPIC=ofisy-billing-events.fifo TYPE=QuoteUpdated scripts/publish-event.sh
 
 event-quote-reproved: ## Publica um QuoteReproved no tópico do billing (SERVICE_ORDER_ID obrigatório, QUOTE_ID e EVENT_ID opcionais)
 	@test -n "$(SERVICE_ORDER_ID)" || (echo "Informe SERVICE_ORDER_ID=<uuid>" && exit 1)
