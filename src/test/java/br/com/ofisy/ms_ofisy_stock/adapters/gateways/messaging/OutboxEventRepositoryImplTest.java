@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OutboxEventRepositoryImplTest {
@@ -46,5 +47,13 @@ class OutboxEventRepositoryImplTest {
         var entity = entityCaptor.getValue();
         assertThat(entity.getEventId()).isEqualTo(outboxEvent.getEventId());
         assertThat(entity.getPayload()).isEqualTo("{\"quoteId\":\"%s\"}".formatted(quoteId));
+    }
+
+    @Test
+    void shouldCheckWhetherServiceOrderHasEventOfType() {
+        var serviceOrderId = UUID.randomUUID();
+        when(jpa.existsByServiceOrderIdAndEventType(serviceOrderId, "StockRefunded")).thenReturn(true);
+
+        assertThat(repository.existsByServiceOrderIdAndEventType(serviceOrderId, "StockRefunded")).isTrue();
     }
 }

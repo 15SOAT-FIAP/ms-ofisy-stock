@@ -12,4 +12,6 @@ public interface JpaOutboxEventRepository extends JpaRepository<OutboxEventEntit
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<OutboxEventEntity> findByPublishedAtIsNullOrderByOccurredAtAsc(Limit limit);
+
+    boolean existsByServiceOrderIdAndEventType(UUID serviceOrderId, String eventType);
 }
