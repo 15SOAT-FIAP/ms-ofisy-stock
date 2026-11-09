@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.UUID;
+
 @Repository
 @RequiredArgsConstructor
 public class OutboxEventRepositoryImpl implements OutboxEventRepository {
@@ -17,5 +19,10 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepository {
     public void save(OutboxEvent outboxEvent) {
         String payloadJson = jsonMapper.writeValueAsString(outboxEvent.getPayload());
         jpa.save(OutboxEventMapper.toEntity(outboxEvent, payloadJson));
+    }
+
+    @Override
+    public boolean existsByServiceOrderIdAndEventType(UUID serviceOrderId, String eventType) {
+        return jpa.existsByServiceOrderIdAndEventType(serviceOrderId, eventType);
     }
 }
