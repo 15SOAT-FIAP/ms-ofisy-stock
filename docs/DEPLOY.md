@@ -87,7 +87,7 @@ O acesso ao SNS/SQS usa as credenciais da `LabRole` dos nós, sem chaves no mani
 
 ## Observabilidade (Datadog)
 
-- **Tracer**: a imagem inclui o `dd-java-agent` com versão e checksum fixos. Ele só é ativado no k8s, pelo `JAVA_TOOL_OPTIONS` do ConfigMap, e envia os traces ao Agent do nó (`DD_AGENT_HOST` recebe o IP do host);
+- **Tracer**: a imagem inclui o `dd-java-agent` com versão e checksum fixos. Ele só é ativado no k8s, pelo `JAVA_TOOL_OPTIONS` do ConfigMap, e envia os traces ao Agent do nó (`DD_AGENT_HOST` recebe o IP do host). Com `DD_TRACE_OTEL_ENABLED=true`, o trace da requisição também segue pelo outbox até a publicação no SNS ([MESSAGING.md](MESSAGING.md#rastreamento-distribuído-pelo-outbox));
 - **Logs**: no perfil `k8s`, o `logback-spring.xml` escreve em JSON com os campos `dd.trace_id` e `dd.span_id`, o que liga cada log ao trace. Nos demais perfis o log continua no console padrão;
 - **Métricas**: o Micrometer exporta para o Datadog quando `DD_METRICS_ENABLED=true` (só no ConfigMap do k8s), com as tags `service` e `env`;
 - **Health check**: a annotation `ad.datadoghq.com/ms-ofisy-stock-app.checks` configura um `http_check` em `/actuator/health`.

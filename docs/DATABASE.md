@@ -46,6 +46,7 @@ erDiagram
         JSONB payload
         TIMESTAMPTZ occurred_at
         TIMESTAMPTZ published_at
+        JSONB trace_context
     }
 ```
 
@@ -145,6 +146,7 @@ Eventos produzidos por este ms, aguardando ou já publicados no SNS ([MESSAGING.
 | `payload`          | `JSONB`        | não  | Dados específicos do tipo de evento                                         |
 | `occurred_at`      | `TIMESTAMPTZ`  | não  | Momento do evento, define a ordem de publicação                             |
 | `published_at`     | `TIMESTAMPTZ`  | sim  | Preenchido quando o evento é publicado no SNS                               |
+| `trace_context`    | `JSONB`        | sim  | Contexto do trace que gerou o evento, restaurado na publicação ([MESSAGING.md](MESSAGING.md#rastreamento-distribuído-pelo-outbox)). Nulo sem o `dd-java-agent` |
 
 As datas usam `TIMESTAMPTZ` porque o `occurredAt` do envelope é um `Instant`.
 
@@ -167,6 +169,7 @@ As datas usam `TIMESTAMPTZ` porque o `occurredAt` do envelope é um `Instant`.
 | V5     | `V5__add_service_order_id_to_stock_movements.sql` | Coluna `service_order_id` em `stock_movements` e índice                   |
 | V6     | `V6__create_processed_events_table.sql`           | Tabela `processed_events`                                                 |
 | V7     | `V7__create_outbox_events_table.sql`              | Tabela `outbox_events` e índice dos pendentes                             |
+| V8     | `V8__add_trace_context_to_outbox_events.sql`      | Coluna `trace_context` em `outbox_events`                                 |
 
 A massa de dados (V3) usa os mesmos IDs de itens da migration de seed do core (`V8__insert_stock_data.sql`), para facilitar testes ponta a ponta.
 
