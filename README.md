@@ -86,13 +86,19 @@ br.com.ofisy.ms_ofisy_stock
 - `application.yaml`: configuração base (datasource em `localhost:5434`, Flyway, região AWS, fila, tópico e outbox). O perfil ativo por padrão é `dev`;
 - `application-dev.yaml`: aponta o SDK da AWS para o LocalStack em `localhost:4566`;
 - `application-docker.yaml`: configuração usada quando a aplicação roda dentro do `compose.yaml`;
+- `application-k8s.yaml`: configuração usada no EKS (RDS via `POSTGRES_HOST`, probes do Kubernetes e AWS real);
+- `logback-spring.xml`: logs em JSON para o Datadog no perfil `k8s` e console padrão nos demais;
 - `pom.xml`: dependências e plugins do Maven.
 
 ### Docker
 
-- `Dockerfile`: build multi-stage da aplicação;
+- `Dockerfile`: build multi-stage da aplicação. A imagem inclui o `dd-java-agent` do Datadog, ativado só no k8s via `JAVA_TOOL_OPTIONS`;
 - `compose.yaml`: ambiente completo (PostgreSQL, LocalStack e aplicação);
 - `compose.db.yaml`: apenas PostgreSQL e LocalStack, para rodar a aplicação na IDE.
+
+### Kubernetes
+
+- `k8s/`: manifestos do deploy no EKS (`configmap`, `secret`, `deployment`, `service` e `hpa`). Ver [DEPLOY.md](docs/DEPLOY.md).
 
 ### Mensageria e utilitários locais
 
@@ -106,9 +112,11 @@ br.com.ofisy.ms_ofisy_stock
 - `.env`: variáveis sensíveis. **Não é versionado**;
 - `env.example`: modelo do `.env`.
 
-### CI (GitHub Actions)
+### CI/CD (GitHub Actions)
 
 - `.github/workflows/ci.yml`: build, testes e gate de cobertura (`mvn verify`) a cada push e Pull Request na `master`;
+- `.github/workflows/cd.yml`: deploy manual no EKS ([DEPLOY.md](docs/DEPLOY.md));
+- `.github/workflows/destroy-app.yml`: remove manualmente os recursos da aplicação do cluster;
 - `.github/workflows/notify-pr.yml`: notifica abertura e fechamento de Pull Requests no Discord.
 
 ---
@@ -187,12 +195,14 @@ Para ver todos os comandos disponíveis, rode `make help`.
 
 ## Variáveis de ambiente
 
-| Variável            | Descrição                                                   |
-|---------------------|-------------------------------------------------------------|
-| `POSTGRES_DB`       | Nome do banco de dados                                      |
-| `POSTGRES_USER`     | Usuário do banco                                            |
-| `POSTGRES_PASSWORD` | Senha do banco                                              |
-| `JWT_SECRET`        | Chave HS256 para validar o JWT. Precisa ser a mesma do core |
+| Variável                           | Descrição                                                    |
+|------------------------------------|--------------------------------------------------------------|
+| `POSTGRES_DB`                      | Nome do banco de dados                                       |
+| `POSTGRES_USER`                    | Usuário do banco                                             |
+| `POSTGRES_PASSWORD`                | Senha do banco                                               |
+| `JWT_SECRET`                       | Chave HS256 para validar o JWT. Precisa ser a mesma do core  |
+| `POSTGRES_HOST`                    | Host do banco no perfil `k8s`                                |
+| `DD_METRICS_ENABLED`, `DD_API_KEY` | Exportação de métricas para o Datadog (desligada por padrão) |
 
 ---
 
@@ -207,6 +217,9 @@ Para ver todos os comandos disponíveis, rode `make help`.
 ### Banco de Dados
 - **[Banco de Dados](docs/DATABASE.md)**: tabelas, constraints e índices
 - **[Guia de Flyway](docs/FLYWAY.md)**: como criar e executar migrations
+
+### Deploy
+- **[Deploy no EKS](docs/DEPLOY.md)**: manifestos, workflows de CD e remoção, exposição pelo API Gateway, deploy manual e Datadog
 
 ### Qualidade e Testes
 - **[Guia de Testes](docs/TESTING.md)**: testes unitários e de integração, Testcontainers e cobertura
