@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class OutboxEventMapper {
 
-    public static OutboxEventEntity toEntity(OutboxEvent domain, String payloadJson) {
+    public static OutboxEventEntity toEntity(OutboxEvent domain, String payloadJson, String traceContextJson) {
         return OutboxEventEntity.builder()
                 .eventId(domain.getEventId())
                 .eventType(domain.getEventType())
@@ -15,6 +15,7 @@ public class OutboxEventMapper {
                 .messageGroupId(domain.getMessageGroupId())
                 .payload(payloadJson)
                 .occurredAt(domain.getOccurredAt())
+                .traceContext(traceContextJson)
                 .build();
     }
 }
