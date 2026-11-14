@@ -1,20 +1,27 @@
 package br.com.ofisy.ms_ofisy_stock.adapters.listeners;
 
 import br.com.ofisy.ms_ofisy_stock.adapters.listeners.dto.EventEnvelope;
+import br.com.ofisy.ms_ofisy_stock.adapters.tracing.MessageTraceContextReader;
+import br.com.ofisy.ms_ofisy_stock.adapters.tracing.TraceContextPropagator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -24,11 +31,22 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class StockEventsListenerTest {
 
+    private static final String TRACEPARENT = "00-6af79dd30000000039a72b7697c5509c-63cc4ef521ebfd0c-01";
+
     @Mock
     private EventHandler quoteCreatedHandler;
 
     @Mock
     private EventHandler otherHandler;
+
+    @Mock
+    private MessageTraceContextReader traceContextReader;
+
+    @Mock
+    private TraceContextPropagator traceContextPropagator;
+
+    @Captor
+    private ArgumentCaptor<Map<String, String>> spanAttributesCaptor;
 
     private StockEventsListener listener;
 
@@ -36,7 +54,12 @@ class StockEventsListenerTest {
     void setUp() {
         lenient().when(quoteCreatedHandler.type()).thenReturn("QuoteCreated");
         lenient().when(otherHandler.type()).thenReturn("AllExecutionsCancelled");
-        listener = new StockEventsListener(List.of(quoteCreatedHandler, otherHandler));
+        lenient().when(traceContextReader.read(any())).thenReturn(Map.of());
+        lenient().doAnswer(invocation -> {
+            invocation.getArgument(3, Runnable.class).run();
+            return null;
+        }).when(traceContextPropagator).runAsConsumer(any(), any(), any(), any());
+        listener = new StockEventsListener(List.of(quoteCreatedHandler, otherHandler), traceContextReader, traceContextPropagator);
     }
 
     private EventEnvelope envelope(String type) {
@@ -50,15 +73,16 @@ class StockEventsListenerTest {
         void shouldFailWhenTwoHandlersDeclareTheSameType() {
             when(otherHandler.type()).thenReturn("QuoteCreated");
 
-            assertThatThrownBy(() -> new StockEventsListener(List.of(quoteCreatedHandler, otherHandler)))
+            assertThatThrownBy(() -> new StockEventsListener(List.of(quoteCreatedHandler, otherHandler), traceContextReader,
+                    traceContextPropagator))
                     .isInstanceOf(IllegalStateException.class);
         }
 
         @Test
         void shouldAcceptNoHandlers() {
-            StockEventsListener emptyListener = new StockEventsListener(List.of());
+            StockEventsListener emptyListener = new StockEventsListener(List.of(), traceContextReader, traceContextPropagator);
 
-            assertThatCode(() -> emptyListener.onMessage(envelope("QuoteCreated"))).doesNotThrowAnyException();
+            assertThatCode(() -> emptyListener.onMessage(envelope("QuoteCreated"), null)).doesNotThrowAnyException();
         }
     }
 
@@ -69,7 +93,7 @@ class StockEventsListenerTest {
         void shouldDispatchEventToHandlerOfItsType() {
             EventEnvelope envelope = envelope("QuoteCreated");
 
-            listener.onMessage(envelope);
+            listener.onMessage(envelope, null);
 
             verify(quoteCreatedHandler).handle(envelope);
             verify(otherHandler, never()).handle(any());
@@ -77,7 +101,7 @@ class StockEventsListenerTest {
 
         @Test
         void shouldIgnoreEventWithoutHandler() {
-            listener.onMessage(envelope("QuoteApproved"));
+            listener.onMessage(envelope("QuoteApproved"), null);
 
             verify(quoteCreatedHandler, never()).handle(any());
             verify(otherHandler, never()).handle(any());
@@ -88,9 +112,36 @@ class StockEventsListenerTest {
             EventEnvelope envelope = envelope("QuoteCreated");
             doThrow(new IllegalStateException("boom")).when(quoteCreatedHandler).handle(envelope);
 
-            assertThatThrownBy(() -> listener.onMessage(envelope))
+            assertThatThrownBy(() -> listener.onMessage(envelope, null))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessage("boom");
+        }
+
+        @Test
+        void shouldHandleEventInsideTraceContextOfMessage() {
+            EventEnvelope envelope = envelope("QuoteCreated");
+            Object traceAttribute = "{\"traceparent\":\"%s\"}".formatted(TRACEPARENT);
+            Map<String, String> traceContext = Map.of("traceparent", TRACEPARENT);
+            when(traceContextReader.read(traceAttribute)).thenReturn(traceContext);
+
+            listener.onMessage(envelope, traceAttribute);
+
+            verify(traceContextPropagator).runAsConsumer(eq(traceContext), eq("event.consume"), spanAttributesCaptor.capture(), any());
+            assertThat(spanAttributesCaptor.getValue())
+                    .containsEntry("ofisy.event.id", envelope.eventId().toString())
+                    .containsEntry("ofisy.event.type", "QuoteCreated")
+                    .containsEntry("ofisy.service_order.id", envelope.serviceOrderId().toString());
+            verify(quoteCreatedHandler).handle(envelope);
+        }
+
+        @Test
+        void shouldNotTagServiceOrderOnSpanOfEventWithoutServiceOrder() {
+            EventEnvelope envelope = new EventEnvelope(UUID.randomUUID(), "QuoteCreated", null, Instant.now(), null);
+
+            listener.onMessage(envelope, null);
+
+            verify(traceContextPropagator).runAsConsumer(any(), any(), spanAttributesCaptor.capture(), any());
+            assertThat(spanAttributesCaptor.getValue()).doesNotContainKey("ofisy.service_order.id");
         }
     }
 }

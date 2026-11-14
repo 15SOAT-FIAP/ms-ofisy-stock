@@ -32,6 +32,7 @@ br.com.ofisy.ms_ofisy_stock
 │   ├── presenters/                   # Conversão do domínio para os DTOs de resposta
 │   ├── gateways/                     # Adaptadores de saída: Entity JPA, Mapper, RepositoryImpl e interface Spring Data
 │   ├── publishers/                   # Adaptadores de saída: publicação do outbox no SNS
+│   ├── tracing/                      # Propagação do contexto do trace pelo outbox
 │   └── listeners/                    # Adaptadores de entrada: consumo da fila SQS
 │       └── dto/                          # Envelope do evento
 ├── config/                       # Configurações do Spring, segurança, JWT, Swagger, SNS e tratamento global de erros
@@ -66,6 +67,7 @@ br.com.ofisy.ms_ofisy_stock
 | Spring Data JPA          | Persistência e mapeamento ORM                                                | `spring-boot-starter-data-jpa`                                                                                            |
 | Spring Validation        | Validação dos DTOs de entrada                                                | `spring-boot-starter-validation`                                                                                          |
 | Spring Actuator          | Endpoint de saúde (`/actuator/health`)                                       | `spring-boot-starter-actuator`                                                                                            |
+| OpenTelemetry API        | Propaga o contexto do trace pelo outbox, conectada ao `dd-java-agent`        | `opentelemetry-api`                                                                                                       |
 | Flyway                   | Versionamento do schema, com suporte ao dialeto do PostgreSQL                | `spring-boot-starter-flyway`, `flyway-database-postgresql`                                                                |
 | PostgreSQL               | Driver JDBC                                                                  | `postgresql`                                                                                                              |
 | Docker Compose           | Sobe o `compose.db.yaml` automaticamente ao rodar a aplicação localmente     | `spring-boot-docker-compose`                                                                                              |
@@ -203,6 +205,7 @@ Para ver todos os comandos disponíveis, rode `make help`.
 | `JWT_SECRET`                       | Chave HS256 para validar o JWT. Precisa ser a mesma do core  |
 | `POSTGRES_HOST`                    | Host do banco no perfil `k8s`                                |
 | `DD_METRICS_ENABLED`, `DD_API_KEY` | Exportação de métricas para o Datadog (desligada por padrão) |
+| `DD_TRACE_OTEL_ENABLED`            | Conecta a API do OpenTelemetry ao `dd-java-agent`, necessária para o trace seguir pelo outbox ([MESSAGING.md](docs/MESSAGING.md#rastreamento-distribuído-pelo-outbox)) |
 
 ---
 
