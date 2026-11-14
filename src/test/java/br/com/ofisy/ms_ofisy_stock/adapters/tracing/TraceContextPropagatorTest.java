@@ -40,6 +40,24 @@ class TraceContextPropagatorTest {
     }
 
     @Test
+    void shouldRunConsumerActionInsideParentContext() {
+        var ran = new AtomicBoolean();
+
+        propagator.runAsConsumer(PARENT_CONTEXT, "event.consume", Map.of("ofisy.event.type", "QuoteCreated"), () -> ran.set(true));
+
+        assertThat(ran).isTrue();
+    }
+
+    @Test
+    void shouldRunConsumerActionWhenThereIsNoParentContext() {
+        var ran = new AtomicBoolean();
+
+        propagator.runAsConsumer(Map.of(), "event.consume", Map.of(), () -> ran.set(true));
+
+        assertThat(ran).isTrue();
+    }
+
+    @Test
     void shouldPropagateFailureOfAction() {
         var failure = new RuntimeException("SNS unavailable");
 
