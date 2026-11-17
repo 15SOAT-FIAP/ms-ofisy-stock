@@ -105,8 +105,9 @@ br.com.ofisy.ms_ofisy_stock
 ### Mensageria e utilitários locais
 
 - `localstack/init/ready.d/01-messaging.sh`: cria a fila, a DLQ, o tópico e a fila de inspeção no LocalStack. É o mesmo script usado nos testes de integração;
+- `scripts/publish-event.sh`: publica um evento no tópico, simulando o produtor real (usado pelos `make event-*`);
 - `scripts/generate-token.sh`: gera um JWT local no mesmo formato do core (`make token ROLE=...`), para testar a API sem subir o core;
-- `Makefile`: atalhos para subir o ambiente, rodar os testes, gerar token, inspecionar a fila e a DLQ e consultar o outbox (`make help`).
+- `Makefile`: atalhos para subir o ambiente, rodar os testes, gerar token, simular eventos, inspecionar a fila e a DLQ e consultar o outbox (`make help`).
 
 ### Git e Ambiente
 
@@ -165,6 +166,8 @@ O LocalStack usa a porta `4566`, a mesma do core, então só um dos dois pode fi
 ### API
 
 A documentação interativa fica no Swagger UI, em `http://localhost:8080/swagger-ui.html` (ou na porta `8082` pelo `compose.yaml`).
+
+Em produção, a spec deste serviço também aparece no Swagger do core, que reúne as APIs de todos os serviços: no Swagger UI do core, escolha `stock` no seletor de definições. O API Gateway expõe o `/v3/api-docs` deste serviço em `/docs/stock`. Para o *Try it out* funcionar por lá, o `SwaggerConfig` declara o servidor do OpenAPI com URL relativa (`/`): as chamadas vão para a raiz do Gateway, com o mesmo roteamento e o mesmo authorizer das chamadas normais.
 
 **Estoque** (`/api/v1/stocks`)
 
