@@ -42,21 +42,15 @@ Para remover a aplicação do cluster (por exemplo, antes de destruir o EKS), ro
 
 ## Exposição pelo API Gateway
 
-O `Service` cria um NLB interno, e o API Gateway do `techchallenge-ofisy-eks-infra` encontra esse NLB pela tag `kubernetes.io/service-name`. Depois do primeiro deploy, altere o `api-gateway/` desse repositório:
+O `Service` cria um NLB interno, e o API Gateway do `techchallenge-ofisy-eks-infra` encontra esse NLB pela tag `kubernetes.io/service-name`. O `api-gateway/` desse repositório já tem o serviço em `nlb_service_names` (`stock = "default/ms-ofisy-stock-service"`) e as rotas em `local.service_routes`:
 
-1. em `variables.tf`, inclua o serviço no default de `nlb_service_names`:
-   ```hcl
-   stock = "default/ms-ofisy-stock-service"
-   ```
-2. em `main.tf`, inclua as rotas do stock em `local.service_routes`. Sem elas, as requisições continuam caindo no `ANY /{proxy+}`, que vai para o core:
-   ```hcl
-   "ANY /api/v1/stocks"                   = { service = "stock", protected = false }
-   "ANY /api/v1/stocks/{proxy+}"          = { service = "stock", protected = false }
-   "ANY /api/v1/stock-movements"          = { service = "stock", protected = false }
-   "ANY /api/v1/stock-movements/{proxy+}" = { service = "stock", protected = false }
-   ```
-   `protected = false` porque o JWT é validado pela própria aplicação, e não pelo authorizer de clientes do Gateway;
-3. rode o deploy do API Gateway.
+```hcl
+"ANY /api/v1/stocks"          = { service = "stock", protected = false }
+"ANY /api/v1/stocks/{proxy+}" = { service = "stock", protected = false }
+"ANY /api/v1/stock-movements" = { service = "stock", protected = false }
+```
+
+`protected = false` porque o JWT é validado pela própria aplicação, e não pelo authorizer de clientes do Gateway. A API de movimentações só tem a raiz (`GET /api/v1/stock-movements`, com o filtro `stockId` na query), então não precisa de rota `{proxy+}`.
 
 Cada vez que o `Service` é recriado (por exemplo, depois do `destroy-app.yml`), o NLB muda e o deploy do API Gateway precisa rodar de novo. Antes de destruir a aplicação sem recriá-la, tire a entrada `stock` de `nlb_service_names`, senão o próximo deploy do Gateway falha ao procurar o NLB.
 
