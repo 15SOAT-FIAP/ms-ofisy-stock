@@ -1,6 +1,6 @@
 # ms-ofisy-stock
 
-FIAP 15SOAT - Tech Challenge - Grupo 81
+FIAP 15SOAT - Tech Challenge - Grupo 87
 
 Microsserviço responsável pelo **estoque de peças e insumos** da Ofisy. Ele mantém o cadastro dos itens, o saldo de cada um e o histórico de movimentações de entrada e saída, e expõe uma API REST para consulta e manutenção do estoque.
 
@@ -48,7 +48,7 @@ br.com.ofisy.ms_ofisy_stock
 | Java             | 21 (LTS) | Linguagem da aplicação                                             |
 | Spring Boot      | 4.1.1    | Framework base                                                     |
 | Spring Cloud AWS | 4.2.0    | Integração com o Amazon SNS e o Amazon SQS                         |
-| PostgreSQL       | 16       | Banco de dados do estoque                                          |
+| PostgreSQL       | 15       | Banco de dados do estoque                                          |
 | LocalStack       | 4.13.1   | Emulação de SNS e SQS no ambiente local e nos testes de integração |
 | Maven            | 3.9.x    | Build e gerenciamento de dependências                              |
 | Docker           | —        | Containerização da aplicação e dos serviços dependentes            |

@@ -228,7 +228,7 @@ Agrupado pela OS. Nada foi consumido, e o payload lista os itens sem saldo sufic
 
 #### `StockLow`
 
-Gravado pelo `ConsumeStockService`, na mesma transação da baixa, então vale tanto para o consumo pela API quanto para o consumo por OS. Como no core, o aviso sai a cada consumo enquanto o saldo estiver igual ou abaixo do mínimo, não só na primeira vez.
+Gravado pelo `ConsumeStockService`, na mesma transação da baixa, então vale tanto para o consumo pela API quanto para o consumo por OS. Como no monolito, antes da extração, o aviso sai a cada consumo enquanto o saldo estiver igual ou abaixo do mínimo, não só na primeira vez.
 
 O aviso não pertence a uma OS: o envelope sai com `serviceOrderId` nulo e o `message-group-id` é o id do item. O payload segue o contrato que o notification já consome:
 
